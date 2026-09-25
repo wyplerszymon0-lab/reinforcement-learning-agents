@@ -48,6 +48,7 @@ class DQNAgent(BaseAgent):
         dueling: bool = True,
         double_dqn: bool = True,
         grad_clip: float = 10.0,
+        train_freq: int = 1,
         device: Optional[torch.device] = None,
     ) -> None:
         if device is None:
@@ -62,6 +63,7 @@ class DQNAgent(BaseAgent):
         self.target_update_freq = target_update_freq
         self.double_dqn = double_dqn
         self.grad_clip = grad_clip
+        self.train_freq = train_freq
         self._update_count = 0
 
         self.online_net = DQNNetwork(obs_dim, action_dim, hidden_dims, dueling).to(device)
@@ -105,6 +107,10 @@ class DQNAgent(BaseAgent):
 
     def update(self) -> Dict[str, float]:
         if not self.replay_buffer.is_ready or len(self.replay_buffer) < self.batch_size:
+            return {}
+        # One gradient step every `train_freq` environment steps. Updating on every
+        # step overfits the replay buffer and makes CartPole oscillate and collapse.
+        if self.total_steps % self.train_freq != 0:
             return {}
 
         states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)

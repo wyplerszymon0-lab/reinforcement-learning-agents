@@ -8,6 +8,12 @@ dist/
 build/
 *.egg-info/
 checkpoints/
-results/plots/*.png
 .env
 *.ipynb_checkpoints
+.venv/
+logs/
+results/models/*
+!results/models/dqn_cartpole_seed1.pt
+!results/models/ppo_cartpole_seed1.pt
+!results/models/dqn_lunarlander_seed1.pt
+!results/models/ppo_lunarlander_seed3.pt

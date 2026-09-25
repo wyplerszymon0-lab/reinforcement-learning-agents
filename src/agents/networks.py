@@ -106,12 +106,13 @@ class DQNNetwork(nn.Module):
 
 class ActorCriticNetwork(nn.Module):
     """
-    Shared-trunk actor-critic for PPO.
+    Actor-critic for PPO with separate actor and critic networks.
 
-    The shared representation is a deliberate inductive bias: features
-    useful for predicting returns are likely useful for selecting actions.
-    In practice, this reduces parameters and can aid sample efficiency,
-    though separate networks sometimes win on harder tasks.
+    The two do not share a trunk on purpose. The value loss is measured in squared
+    returns (thousands on LunarLander), while the policy loss is O(1): with a shared
+    trunk the critic's gradient dominates the shared weights, and after global
+    gradient-norm clipping the policy receives a tiny fraction of each step (measured
+    at ~0.03% on LunarLander), so the agent barely learns.
 
     Actor head initialized with small std (0.01) so the initial policy is
     near-uniform — the agent explores before exploiting at the start.
@@ -125,31 +126,33 @@ class ActorCriticNetwork(nn.Module):
         hidden_dims: list[int] = (64, 64),
     ) -> None:
         super().__init__()
+        self.actor_trunk = self._make_trunk(obs_dim, hidden_dims)
+        self.critic_trunk = self._make_trunk(obs_dim, hidden_dims)
+        self.actor_head = layer_init(nn.Linear(hidden_dims[-1], action_dim), std=0.01)
+        self.critic_head = layer_init(nn.Linear(hidden_dims[-1], 1), std=1.0)
 
-        trunk_layers: list[nn.Module] = []
+    @staticmethod
+    def _make_trunk(obs_dim: int, hidden_dims) -> nn.Sequential:
+        layers: list[nn.Module] = []
         in_dim = obs_dim
         for h_dim in hidden_dims:
             # Tanh is preferred over ReLU in on-policy methods: bounded activations
             # reduce variance in policy gradients and work well with GAE.
-            trunk_layers.append(layer_init(nn.Linear(in_dim, h_dim)))
-            trunk_layers.append(nn.Tanh())
+            layers.append(layer_init(nn.Linear(in_dim, h_dim)))
+            layers.append(nn.Tanh())
             in_dim = h_dim
-        self.trunk = nn.Sequential(*trunk_layers)
-
-        self.actor_head = layer_init(nn.Linear(in_dim, action_dim), std=0.01)
-        self.critic_head = layer_init(nn.Linear(in_dim, 1), std=1.0)
+        return nn.Sequential(*layers)
 
     def get_value(self, x: torch.Tensor) -> torch.Tensor:
-        return self.critic_head(self.trunk(x))
+        return self.critic_head(self.critic_trunk(x))
 
     def get_action_and_value(
         self,
         x: torch.Tensor,
         action: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        features = self.trunk(x)
-        logits = self.actor_head(features)
-        value = self.critic_head(features)
+        logits = self.actor_head(self.actor_trunk(x))
+        value = self.get_value(x)
 
         dist = Categorical(logits=logits)
         if action is None:
@@ -160,5 +163,4 @@ class ActorCriticNetwork(nn.Module):
         return action, log_prob, entropy, value.squeeze(-1)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        features = self.trunk(x)
-        return self.actor_head(features), self.critic_head(features)
+        return self.actor_head(self.actor_trunk(x)), self.get_value(x)

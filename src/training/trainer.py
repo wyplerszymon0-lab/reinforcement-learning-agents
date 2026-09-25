@@ -66,6 +66,7 @@ class DQNTrainer:
         self.callbacks = callbacks or CallbackList([])
         self.verbose = verbose
         self.metrics = TrainingMetrics()
+        self.stop_training = False
 
     def train(self) -> TrainingMetrics:
         obs, _ = self.env.reset()
@@ -97,6 +98,8 @@ class DQNTrainer:
                 obs, _ = self.env.reset()
                 episode_reward = 0.0
                 episode_length = 0
+                if self.stop_training:
+                    break
 
             update_metrics = self.agent.update()
             if update_metrics and "loss" in update_metrics:
@@ -148,6 +151,7 @@ class PPOTrainer:
         self.callbacks = callbacks or CallbackList([])
         self.verbose = verbose
         self.metrics = TrainingMetrics()
+        self.stop_training = False
 
     def train(self) -> TrainingMetrics:
         obs, _ = self.env.reset()
@@ -161,6 +165,8 @@ class PPOTrainer:
         start_time = time.time()
 
         for update in range(1, num_updates + 1):
+            if self.stop_training:
+                break
             # Collect rollout
             for _ in range(self.agent.num_steps):
                 action, log_prob, value = self.agent.act_with_extras(obs)

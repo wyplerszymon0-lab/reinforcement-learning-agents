@@ -83,6 +83,8 @@ class PPOAgent(BaseAgent):
 
         self.network = ActorCriticNetwork(obs_dim, action_dim, hidden_dims).to(device)
         self.optimizer = optim.Adam(self.network.parameters(), lr=lr, eps=1e-5)
+        self._actor_params = [*self.network.actor_trunk.parameters(), *self.network.actor_head.parameters()]
+        self._critic_params = [*self.network.critic_trunk.parameters(), *self.network.critic_head.parameters()]
         self._initial_lr = lr
         self.rollout_buffer = RolloutBuffer(num_steps, obs_dim, device)
 
@@ -91,8 +93,13 @@ class PPOAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     def act(self, obs: np.ndarray, training: bool = True) -> int:
+        """Sample from the policy while training; take its most likely action otherwise."""
         with torch.no_grad():
-            action, _, _, _ = self.network.get_action_and_value(self._obs_to_tensor(obs))
+            obs_t = self._obs_to_tensor(obs)
+            if not training:
+                logits, _ = self.network(obs_t)
+                return int(logits.argmax(dim=-1).item())
+            action, _, _, _ = self.network.get_action_and_value(obs_t)
         return int(action.item())
 
     def act_with_extras(
@@ -201,7 +208,11 @@ class PPOAgent(BaseAgent):
 
                 self.optimizer.zero_grad()
                 total_loss.backward()
-                nn.utils.clip_grad_norm_(self.network.parameters(), self.max_grad_norm)
+                # Clip actor and critic separately: the value gradient is orders of
+                # magnitude larger, and one global norm would shrink the policy step
+                # until Adam's epsilon swallows it.
+                nn.utils.clip_grad_norm_(self._actor_params, self.max_grad_norm)
+                nn.utils.clip_grad_norm_(self._critic_params, self.max_grad_norm)
                 self.optimizer.step()
 
                 metrics["policy_loss"].append(policy_loss.item())

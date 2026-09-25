@@ -59,7 +59,7 @@ class EarlyStoppingCallback(BaseCallback):
                 print(
                     f"\nSolved! Mean reward {mean_r:.2f} >= threshold {self.reward_threshold}"
                 )
-                trainer.total_timesteps = 0  # signal trainer to stop
+                trainer.stop_training = True
 
 
 class LoggingCallback(BaseCallback):

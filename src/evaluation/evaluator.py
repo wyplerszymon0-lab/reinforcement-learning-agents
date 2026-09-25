@@ -21,8 +21,12 @@ class Evaluator:
         self.env = env
         self.n_episodes = n_episodes
 
-    def evaluate(self, agent: BaseAgent) -> Dict[str, float]:
-        """Run agent for n_episodes without exploration. Returns summary stats."""
+    def evaluate(self, agent: BaseAgent, deterministic: bool = True) -> Dict[str, float]:
+        """Run agent for n_episodes. Returns summary stats.
+
+        deterministic=True takes the greedy action; False samples from the policy
+        (only meaningful for stochastic policies such as PPO).
+        """
         rewards: List[float] = []
         lengths: List[int] = []
 
@@ -33,7 +37,7 @@ class Evaluator:
             ep_length = 0
 
             while not done:
-                action = agent.act(obs, training=False)
+                action = agent.act(obs, training=not deterministic)
                 obs, reward, terminated, truncated, _ = self.env.step(action)
                 ep_reward += float(reward)
                 ep_length += 1

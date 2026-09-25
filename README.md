@@ -1,21 +1,68 @@
 # Reinforcement Learning Agents from Scratch
 
+[![CI](https://github.com/wyplerszymon0-lab/reinforcement-learning-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/wyplerszymon0-lab/reinforcement-learning-agents/actions/workflows/ci.yml)
+
 DQN and PPO implemented in pure PyTorch, trained on CartPole-v1 and LunarLander-v3.  
 No stable-baselines3. No RLlib. Just the math.
 
-```
-results/plots/
-├── dqn_cartpole_training.png
-├── ppo_cartpole_training.png
-├── dqn_lunarlander_training.png
-├── ppo_lunarlander_training.png
-└── dqn_vs_ppo_cartpole.png      ← generated after training both
-```
+| DQN · CartPole | PPO · CartPole | DQN · LunarLander | PPO · LunarLander |
+| :---: | :---: | :---: | :---: |
+| ![DQN CartPole](results/gifs/dqn_cartpole.gif) | ![PPO CartPole](results/gifs/ppo_cartpole.gif) | ![DQN LunarLander](results/gifs/dqn_lunarlander.gif) | ![PPO LunarLander](results/gifs/ppo_lunarlander.gif) |
 
-> **GIF placeholder** — add `results/cartpole_agent.gif` and `results/lunarlander_agent.gif`  
-> after training using `gymnasium`'s `RecordVideo` wrapper.
+<sub>Best seed of each, final policy, one fresh episode. Rendered by `scripts/make_report.py`.</sub>
+
+## Results
+
+Every configuration was trained with **3 seeds** and evaluated on 100 fresh episodes
+([full per-seed table](results/RESULTS.md)).
+
+| Environment | Algorithm | Solved | Median steps to solve | Greedy eval | Sampled eval |
+| :--- | :--- | :---: | ---: | ---: | ---: |
+| CartPole-v1 | DQN | 1/3 | 464k | 429.7 ± 104.0 | — |
+| CartPole-v1 | PPO | 2/3 | 410k | 500.0 ± 0.0 | 488.6 ± 8.0 |
+| LunarLander-v3 | DQN | 3/3 | 163k | 217.5 ± 4.5 | — |
+| LunarLander-v3 | PPO | 1/3 | 698k | 146.2 ± 52.1 | 128.7 ± 39.2 |
+
+*Solved* = the trailing 100-episode training return reached the official threshold
+(CartPole 475, LunarLander 200); training stops there. *Sampled eval* samples actions
+from PPO's policy distribution instead of always taking the most likely one.
+
+![DQN vs PPO on LunarLander](results/plots/lunarlander_dqn_vs_ppo.png)
+![DQN vs PPO on CartPole](results/plots/cartpole_dqn_vs_ppo.png)
+
+<sub>Line: mean over seeds of the trailing 100-episode return. Band: best to worst seed.
+A seed that stopped early (solved) is held at its final value.</sub>
+
+**Takeaways**
+
+- **DQN is the clear winner on LunarLander**: all 3 seeds solve it in 118k–199k steps,
+  about 4× fewer environment steps than the one PPO seed that got there.
+- **PPO dominates CartPole early** (return ~270 after 50k steps, DQN ~40), and its
+  greedy policy balances perfectly (500/500) on every seed.
+- **DQN on CartPole is the least stable combination**: one seed solves it, the others
+  plateau between 300 and 480. Seed-to-seed variance is large for both algorithms,
+  which is why single-seed results in RL are not worth much.
+
+### What training revealed
+
+The first full training run exposed three bugs that unit tests had not caught. Each
+is fixed and now has a regression test:
+
+1. **Early stopping never stopped anything.** The callback set
+   `trainer.total_timesteps = 0`, but the loop had already built its `range(...)`.
+   Trainers now check a `stop_training` flag.
+2. **PPO barely learned on LunarLander** (−150 after 1M steps). Actor and critic
+   shared a trunk, and the value loss (returns squared, ~6,000) produced a gradient
+   **~2,000× larger** than the policy's. After global gradient clipping the policy got
+   **0.025%** of each step. Fix: separate actor and critic networks, clipped separately.
+3. **PPO's "greedy" evaluation was sampling.** `act(training=False)` ignored the flag.
+
+DQN on CartPole also oscillated and collapsed when it took a gradient step on every
+environment step (greedy eval 138–170 after 500k steps). Updating every 4 steps
+(`train_freq: 4`) made learning monotonic: 310–500.
 
 ---
+
 
 ## Algorithms
 
@@ -84,12 +131,7 @@ $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l
 
 ---
 
-## Benchmark Results
-
-> Results shown as mean ± std over 50 evaluation episodes after training.
-
-| Algorithm | Environment | Mean Return | Std | Steps to Solve |
-|---|---|---|---|---|
+--|---|---|---|
 | DQN (Double + Dueling) | CartPole-v1 | ~490 | ~15 | ~80k |
 | PPO (GAE) | CartPole-v1 | ~500 | ~3 | ~150k |
 | DQN (Double + Dueling) | LunarLander-v3 | ~220 | ~40 | ~350k |
@@ -119,15 +161,18 @@ $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l
 │   └── evaluation/
 │       ├── evaluator.py        # Greedy evaluation with trajectory collection
 │       └── plotting.py         # Training curves, comparisons, distributions
-├── tests/                      # 30+ pytest tests
+├── tests/                      # 75 pytest tests
 ├── scripts/
-│   ├── train_cartpole.py
-│   └── train_lunarlander.py
+│   ├── train.py                # train one algo/env/seed from config.yaml
+│   └── make_report.py          # plots, GIFs and RESULTS.md from all runs
 ├── notebooks/
 │   └── dqn_vs_ppo_comparison.ipynb
-├── checkpoints/                # Saved model weights (.pt)
-├── results/plots/              # PNG training curves
-└── config.yaml                 # Hyperparameter reference
+├── results/
+│   ├── runs/                   # per-seed training logs + evaluations (JSON)
+│   ├── models/                 # weights of the best seed per algo/env
+│   ├── plots/  gifs/           # generated figures
+│   └── RESULTS.md              # generated results table
+└── config.yaml                 # all hyperparameters (single source of truth)
 ```
 
 ---
@@ -141,11 +186,12 @@ pip install -e ".[dev,notebooks]"
 # Run tests
 pytest
 
-# Train on CartPole
-python scripts/train_cartpole.py --algo both --seed 42
+# Train one configuration (hyperparameters come from config.yaml)
+python scripts/train.py --env cartpole --algo ppo --seed 1
+python scripts/train.py --env lunarlander --algo dqn --seed 1
 
-# Train on LunarLander (takes longer)
-python scripts/train_lunarlander.py --algo ppo --seed 42
+# Rebuild plots, GIFs and results/RESULTS.md from every run in results/runs/
+python scripts/make_report.py
 
 # Interactive comparison notebook
 jupyter notebook notebooks/dqn_vs_ppo_comparison.ipynb
