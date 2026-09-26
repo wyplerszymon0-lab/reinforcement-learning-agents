@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import gymnasium as gym
 import imageio.v2 as imageio
@@ -29,7 +30,8 @@ def record_episode(
     """
     env = gym.make(env_id, render_mode="rgb_array")
     obs, _ = env.reset(seed=seed)
-    frames, total, done, step = [], 0.0, False, 0
+    frames: list[Any] = []
+    total, done, step = 0.0, False, 0
 
     while not done and step < max_steps:
         if step % frame_skip == 0:

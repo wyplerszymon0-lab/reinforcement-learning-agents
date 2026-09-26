@@ -6,7 +6,7 @@ All functions save figures as PNG and optionally return the Figure object.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import matplotlib
 import matplotlib.ticker
@@ -32,7 +32,7 @@ _STYLE = {
 
 
 def _apply_style() -> None:
-    plt.rcParams.update(_STYLE)
+    plt.rcParams.update(cast(dict[Any, Any], _STYLE))
 
 
 def smooth(values: List[float], window: int = 20) -> np.ndarray:
@@ -199,9 +199,9 @@ def plot_seeds_by_steps(
             trailing = np.array([rewards[max(0, i - window + 1) : i + 1].mean() for i in range(len(rewards))])
             # A seed that stopped early (solved) holds its final value to the end of the grid.
             curves.append(np.interp(grid, steps, trailing, right=trailing[-1]))
-        curves = np.vstack(curves)
-        ax.plot(grid, curves.mean(axis=0), color=color, label=f"{name} ({len(seeds)} seeds)")
-        ax.fill_between(grid, curves.min(axis=0), curves.max(axis=0), color=color, alpha=0.2)
+        stacked = np.vstack(curves)
+        ax.plot(grid, stacked.mean(axis=0), color=color, label=f"{name} ({len(seeds)} seeds)")
+        ax.fill_between(grid, stacked.min(axis=0), stacked.max(axis=0), color=color, alpha=0.2)
 
     if threshold is not None:
         ax.axhline(threshold, color="#8b949e", linestyle=":", label=f"solved ({threshold:g})")

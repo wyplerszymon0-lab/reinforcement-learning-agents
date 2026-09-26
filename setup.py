@@ -15,7 +15,7 @@ setup(
         "imageio>=2.30",
     ],
     extras_require={
-        "dev": ["pytest>=7.4.0", "pytest-cov>=4.1.0"],
+        "dev": ["pytest>=7.4.0", "pytest-cov>=4.1.0", "mypy>=1.0.0", "types-PyYAML>=6.0"],
         "notebooks": ["jupyter>=1.0.0", "ipykernel>=6.0.0"],
     },
 )

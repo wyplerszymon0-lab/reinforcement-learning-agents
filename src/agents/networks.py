@@ -9,7 +9,7 @@ Design choices:
 """
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -61,7 +61,7 @@ class DQNNetwork(nn.Module):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: list[int] = (256, 256),
+        hidden_dims: Sequence[int] = (256, 256),
         dueling: bool = True,
     ) -> None:
         super().__init__()
@@ -123,7 +123,7 @@ class ActorCriticNetwork(nn.Module):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: list[int] = (64, 64),
+        hidden_dims: Sequence[int] = (64, 64),
     ) -> None:
         super().__init__()
         self.actor_trunk = self._make_trunk(obs_dim, hidden_dims)
@@ -132,7 +132,7 @@ class ActorCriticNetwork(nn.Module):
         self.critic_head = layer_init(nn.Linear(hidden_dims[-1], 1), std=1.0)
 
     @staticmethod
-    def _make_trunk(obs_dim: int, hidden_dims) -> nn.Sequential:
+    def _make_trunk(obs_dim: int, hidden_dims: Sequence[int]) -> nn.Sequential:
         layers: list[nn.Module] = []
         in_dim = obs_dim
         for h_dim in hidden_dims:
