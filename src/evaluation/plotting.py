@@ -6,7 +6,7 @@ All functions save figures as PNG and optionally return the Figure object.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import matplotlib
 import matplotlib.ticker
@@ -32,8 +32,7 @@ _STYLE = {
 
 
 def _apply_style() -> None:
-    for k, v in _STYLE.items():
-        plt.rcParams[k] = v
+    plt.rcParams.update(cast(dict[Any, Any], _STYLE))
 
 
 def smooth(values: List[float], window: int = 20) -> np.ndarray:
