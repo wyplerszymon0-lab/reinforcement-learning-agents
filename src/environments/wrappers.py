@@ -45,8 +45,10 @@ class NormalizeObservationWrapper(gym.ObservationWrapper):
         super().__init__(env)
         self.epsilon = epsilon
         obs_shape = env.observation_space.shape
-        self._mean = np.zeros(obs_shape, dtype=np.float64)
-        self._var = np.ones(obs_shape, dtype=np.float64)
+        if obs_shape is None:
+            raise ValueError("Observation space must have a shape")
+        self._mean: np.ndarray = np.zeros(obs_shape, dtype=np.float64)
+        self._var: np.ndarray = np.ones(obs_shape, dtype=np.float64)
         self._count = 0.0
 
     def observation(self, obs: np.ndarray) -> np.ndarray:
@@ -92,7 +94,7 @@ class EpisodeMonitor(gym.Wrapper):
                 "r": self._episode_return,
                 "l": self._episode_length,
             }
-        return obs, reward, terminated, truncated, info
+        return obs, float(reward), terminated, truncated, info
 
 
 class ClipRewardWrapper(gym.RewardWrapper):

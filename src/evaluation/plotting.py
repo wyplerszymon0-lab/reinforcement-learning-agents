@@ -32,7 +32,8 @@ _STYLE = {
 
 
 def _apply_style() -> None:
-    plt.rcParams.update(_STYLE)
+    for k, v in _STYLE.items():
+        plt.rcParams[k] = v
 
 
 def smooth(values: List[float], window: int = 20) -> np.ndarray:
@@ -199,9 +200,9 @@ def plot_seeds_by_steps(
             trailing = np.array([rewards[max(0, i - window + 1) : i + 1].mean() for i in range(len(rewards))])
             # A seed that stopped early (solved) holds its final value to the end of the grid.
             curves.append(np.interp(grid, steps, trailing, right=trailing[-1]))
-        curves = np.vstack(curves)
-        ax.plot(grid, curves.mean(axis=0), color=color, label=f"{name} ({len(seeds)} seeds)")
-        ax.fill_between(grid, curves.min(axis=0), curves.max(axis=0), color=color, alpha=0.2)
+        stacked = np.vstack(curves)
+        ax.plot(grid, stacked.mean(axis=0), color=color, label=f"{name} ({len(seeds)} seeds)")
+        ax.fill_between(grid, stacked.min(axis=0), stacked.max(axis=0), color=color, alpha=0.2)
 
     if threshold is not None:
         ax.axhline(threshold, color="#8b949e", linestyle=":", label=f"solved ({threshold:g})")

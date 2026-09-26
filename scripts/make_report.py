@@ -27,7 +27,7 @@ ALGO_NAMES = {"dqn": "DQN", "ppo": "PPO"}
 
 
 def load_runs(runs_dir: Path) -> dict:
-    grouped = defaultdict(lambda: defaultdict(list))
+    grouped: defaultdict[str, defaultdict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
     for path in sorted(runs_dir.glob("*.json")):
         run = json.loads(path.read_text(encoding="utf-8"))
         grouped[run["env"]][run["algo"]].append(run)
