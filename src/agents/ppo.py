@@ -24,7 +24,7 @@ but helps stability.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 import torch
@@ -41,7 +41,7 @@ class PPOAgent(BaseAgent):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: list[int] = (64, 64),
+        hidden_dims: Sequence[int] = (64, 64),
         lr: float = 2.5e-4,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,

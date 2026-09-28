@@ -6,7 +6,7 @@ All functions save figures as PNG and optionally return the Figure object.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import matplotlib
 import matplotlib.ticker
@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-_STYLE = {
+_STYLE: Dict[str, Any] = {
     "figure.facecolor": "#0d1117",
     "axes.facecolor": "#161b22",
     "axes.edgecolor": "#30363d",
@@ -32,7 +32,7 @@ _STYLE = {
 
 
 def _apply_style() -> None:
-    plt.rcParams.update(_STYLE)
+    plt.style.use(_STYLE)
 
 
 def smooth(values: List[float], window: int = 20) -> np.ndarray:
@@ -193,13 +193,13 @@ def plot_seeds_by_steps(
     for (name, seeds), color in zip(runs.items(), colors):
         # Start where every seed has finished at least one episode.
         grid = np.linspace(max(steps[0] for steps, _ in seeds), max(steps[-1] for steps, _ in seeds), 400)
-        curves = []
+        per_seed = []
         for steps, rewards in seeds:
-            rewards = np.asarray(rewards, dtype=np.float64)
-            trailing = np.array([rewards[max(0, i - window + 1) : i + 1].mean() for i in range(len(rewards))])
+            returns = np.asarray(rewards, dtype=np.float64)
+            trailing = np.array([returns[max(0, i - window + 1) : i + 1].mean() for i in range(len(returns))])
             # A seed that stopped early (solved) holds its final value to the end of the grid.
-            curves.append(np.interp(grid, steps, trailing, right=trailing[-1]))
-        curves = np.vstack(curves)
+            per_seed.append(np.interp(grid, steps, trailing, right=trailing[-1]))
+        curves = np.vstack(per_seed)
         ax.plot(grid, curves.mean(axis=0), color=color, label=f"{name} ({len(seeds)} seeds)")
         ax.fill_between(grid, curves.min(axis=0), curves.max(axis=0), color=color, alpha=0.2)
 
