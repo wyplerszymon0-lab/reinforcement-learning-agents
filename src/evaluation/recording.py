@@ -6,6 +6,7 @@ from pathlib import Path
 import gymnasium as gym
 import imageio.v2 as imageio
 import numpy as np
+import numpy.typing as npt
 
 from src.agents.base_agent import BaseAgent
 
@@ -29,7 +30,8 @@ def record_episode(
     """
     env = gym.make(env_id, render_mode="rgb_array")
     obs, _ = env.reset(seed=seed)
-    frames, total, done, step = [], 0.0, False, 0
+    frames: list[npt.ArrayLike] = []
+    total, done, step = 0.0, False, 0
 
     while not done and step < max_steps:
         if step % frame_skip == 0:

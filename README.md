@@ -186,6 +186,9 @@ pip install -e ".[dev,notebooks]"
 # Run tests
 pytest
 
+# Type check (runs in CI too)
+mypy
+
 # Train one configuration (hyperparameters come from config.yaml)
 python scripts/train.py --env cartpole --algo ppo --seed 1
 python scripts/train.py --env lunarlander --algo dqn --seed 1

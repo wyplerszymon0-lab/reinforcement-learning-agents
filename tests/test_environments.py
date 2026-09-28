@@ -71,6 +71,15 @@ def test_normalize_obs_shape_preserved():
     assert obs.shape == base.observation_space.shape
 
 
+def test_normalize_obs_rejects_spaces_without_a_shape():
+    class DictObsEnv(gym.Env):
+        observation_space = gym.spaces.Dict({"x": gym.spaces.Discrete(3)})
+        action_space = gym.spaces.Discrete(2)
+
+    with pytest.raises(ValueError, match="fixed shape"):
+        NormalizeObservationWrapper(DictObsEnv())
+
+
 # ---------------------------------------------------------------------------
 # EpisodeMonitor
 # ---------------------------------------------------------------------------

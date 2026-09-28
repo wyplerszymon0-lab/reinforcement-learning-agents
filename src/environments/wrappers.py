@@ -45,6 +45,8 @@ class NormalizeObservationWrapper(gym.ObservationWrapper):
         super().__init__(env)
         self.epsilon = epsilon
         obs_shape = env.observation_space.shape
+        if obs_shape is None:
+            raise ValueError("NormalizeObservationWrapper needs an observation space with a fixed shape (e.g. Box)")
         self._mean = np.zeros(obs_shape, dtype=np.float64)
         self._var = np.ones(obs_shape, dtype=np.float64)
         self._count = 0.0
@@ -83,7 +85,7 @@ class EpisodeMonitor(gym.Wrapper):
 
     def step(
         self, action: Any
-    ) -> Tuple[np.ndarray, float, bool, bool, dict]:
+    ) -> Tuple[Any, SupportsFloat, bool, bool, dict]:
         obs, reward, terminated, truncated, info = self.env.step(action)
         self._episode_return += float(reward)
         self._episode_length += 1

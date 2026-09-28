@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 import torch
@@ -36,7 +36,7 @@ class DQNAgent(BaseAgent):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: list[int] = (256, 256),
+        hidden_dims: Sequence[int] = (256, 256),
         lr: float = 1e-4,
         gamma: float = 0.99,
         epsilon_start: float = 1.0,

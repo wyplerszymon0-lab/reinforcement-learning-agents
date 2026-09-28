@@ -9,7 +9,7 @@ Design choices:
 """
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -27,7 +27,7 @@ class MLP(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        hidden_dims: list[int],
+        hidden_dims: Sequence[int],
         output_dim: int,
         activation: nn.Module = nn.ReLU(),
         output_std: float = 0.01,
@@ -61,7 +61,7 @@ class DQNNetwork(nn.Module):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: list[int] = (256, 256),
+        hidden_dims: Sequence[int] = (256, 256),
         dueling: bool = True,
     ) -> None:
         super().__init__()
@@ -123,7 +123,7 @@ class ActorCriticNetwork(nn.Module):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: list[int] = (64, 64),
+        hidden_dims: Sequence[int] = (64, 64),
     ) -> None:
         super().__init__()
         self.actor_trunk = self._make_trunk(obs_dim, hidden_dims)
