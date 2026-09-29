@@ -183,7 +183,8 @@ $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l
 ├── scripts/
 │   ├── train.py                # train one algo/env/seed from config.yaml
 │   ├── make_report.py          # plots, GIFs and RESULTS.md from all runs
-│   └── robustness.py           # evaluation under observation noise
+│   ├── robustness.py           # evaluation under observation noise
+│   └── enjoy.py                # watch a trained agent play
 ├── notebooks/
 │   └── dqn_vs_ppo_comparison.ipynb
 ├── results/
@@ -214,6 +215,9 @@ python scripts/train.py --env lunarlander --algo dqn --seed 1
 
 # Rebuild plots, GIFs and results/RESULTS.md from every run in results/runs/
 python scripts/make_report.py
+
+# Watch a trained agent play in a window (best seed unless --seed is given)
+python scripts/enjoy.py --env lunarlander --algo dqn
 
 # Interactive comparison notebook
 jupyter notebook notebooks/dqn_vs_ppo_comparison.ipynb

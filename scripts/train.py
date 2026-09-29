@@ -53,6 +53,21 @@ def build_agent(algo: str, obs_dim: int, action_dim: int, hp: dict):
     return PPOAgent(obs_dim=obs_dim, action_dim=action_dim, **hp)
 
 
+
+def model_path(run: dict, results_dir: Path = ROOT / "results") -> Path:
+    return results_dir / "models" / f"{run['algo']}_{run['env']}_seed{run['seed']}.pt"
+
+
+def load_trained_agent(run: dict, results_dir: Path = ROOT / "results"):
+    """Rebuild the agent described by a results/runs/*.json entry and load its weights."""
+    env = gym.make(run["env_id"])
+    obs_dim, action_dim = get_env_dims(env)
+    env.close()
+    agent = build_agent(run["algo"], obs_dim, action_dim, run["hyperparams"])
+    agent.load(model_path(run, results_dir))
+    return agent
+
+
 def solved_at_step(rewards, steps, threshold, window=100):
     """First environment step at which the trailing `window`-episode mean hit the threshold."""
     for i in range(window - 1, len(rewards)):

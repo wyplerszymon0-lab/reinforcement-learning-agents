@@ -26,8 +26,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from scripts.train import ENVS, build_agent
-from src.environments.utils import get_env_dims
+from scripts.train import ENVS, load_trained_agent, model_path
 from src.environments.wrappers import GaussianObservationNoise
 from src.evaluation.plotting import plot_noise_robustness
 
@@ -35,15 +34,6 @@ ROOT = Path(__file__).parent.parent
 RESULTS = ROOT / "results"
 NOISE_LEVELS = [0.0, 0.05, 0.1, 0.2, 0.5, 1.0]
 ALGO_NAMES = {"dqn": "DQN", "ppo": "PPO"}
-
-
-def load_agent(run: dict):
-    env = gym.make(run["env_id"])
-    obs_dim, action_dim = get_env_dims(env)
-    env.close()
-    agent = build_agent(run["algo"], obs_dim, action_dim, run["hyperparams"])
-    agent.load(RESULTS / "models" / f"{run['algo']}_{run['env']}_seed{run['seed']}.pt")
-    return agent
 
 
 def play(agent, env: gym.Env, episodes: int, seed: int, record: list | None = None) -> list[float]:
@@ -69,11 +59,11 @@ def main() -> None:
     torch.set_num_threads(1)
 
     runs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted((RESULTS / "runs").glob("*.json"))]
-    runs = [r for r in runs if (RESULTS / "models" / f"{r['algo']}_{r['env']}_seed{r['seed']}.pt").exists()]
+    runs = [r for r in runs if model_path(r, RESULTS).exists()]
     if not runs:
         sys.exit("no trained models in results/models — train first with scripts/train.py")
 
-    agents = {id(r): load_agent(r) for r in runs}
+    agents = {id(r): load_trained_agent(r, RESULTS) for r in runs}
     results: dict = {}
     for env_name, (env_id, threshold) in ENVS.items():
         env_runs = [r for r in runs if r["env"] == env_name]
