@@ -109,6 +109,25 @@ class ClipRewardWrapper(gym.RewardWrapper):
         return float(np.clip(float(reward), self.low, self.high))
 
 
+class GaussianObservationNoise(gym.ObservationWrapper):
+    """
+    Add zero-mean Gaussian noise to every observation the agent sees.
+
+    Models imperfect sensors: the environment's true state is unchanged, only
+    the agent's view of it is corrupted. `sigma` is a scalar or one standard
+    deviation per observation dimension.
+    """
+
+    def __init__(self, env: gym.Env, sigma: float | np.ndarray, seed: Optional[int] = None) -> None:
+        super().__init__(env)
+        self.sigma = np.asarray(sigma, dtype=np.float64)
+        self._rng = np.random.default_rng(seed)
+
+    def observation(self, obs: np.ndarray) -> np.ndarray:
+        noise = self._rng.normal(0.0, 1.0, size=np.shape(obs)) * self.sigma
+        return (obs + noise).astype(np.asarray(obs).dtype)
+
+
 def make_env(
     env_id: str,
     seed: int = 0,

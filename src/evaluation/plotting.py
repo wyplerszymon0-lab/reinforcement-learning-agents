@@ -219,3 +219,44 @@ def plot_seeds_by_steps(
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, dpi=120, bbox_inches="tight")
     return fig
+
+
+def plot_noise_robustness(
+    payload: Dict[str, Any],
+    algo_names: Dict[str, str],
+    save_path: Optional[Path] = None,
+) -> plt.Figure:
+    """Mean return vs observation-noise level, one panel per environment.
+
+    `payload` is the structure written by scripts/robustness.py. The line is the
+    mean over seeds and the band spans the best and worst seed.
+    """
+    _apply_style()
+    colors = {"dqn": "#58a6ff", "ppo": "#3fb950"}
+    levels = np.asarray(payload["noise_levels"])
+    envs = payload["envs"]
+    fig, axes = plt.subplots(1, len(envs), figsize=(6 * len(envs), 4.5), squeeze=False)
+
+    for ax, env in zip(axes[0], envs.values()):
+        for algo in algo_names:
+            seeds = np.asarray([r["mean_return"] for r in env["runs"] if r["algo"] == algo])
+            if not len(seeds):
+                continue
+            ax.plot(levels, seeds.mean(axis=0), marker="o", color=colors[algo],
+                    label=f"{algo_names[algo]} ({len(seeds)} seeds)")
+            ax.fill_between(levels, seeds.min(axis=0), seeds.max(axis=0), color=colors[algo], alpha=0.2)
+        ax.axhline(env["threshold"], color="#8b949e", linestyle=":", label=f"solved ({env['threshold']:g})")
+        ax.set_xscale("symlog", linthresh=0.05)
+        ax.set_xticks(levels)
+        ax.set_xticklabels([f"{l:g}σ" for l in levels])
+        ax.set_xlabel("Observation noise (× per-dimension std)")
+        ax.set_ylabel("Mean return")
+        ax.set_title(env["env_id"])
+        ax.legend(loc="lower left")
+        ax.grid(True)
+    fig.tight_layout()
+
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=120, bbox_inches="tight")
+    return fig

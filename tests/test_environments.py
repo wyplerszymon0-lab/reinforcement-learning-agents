@@ -6,6 +6,7 @@ import gymnasium as gym
 from src.environments.wrappers import (
     ClipRewardWrapper,
     EpisodeMonitor,
+    GaussianObservationNoise,
     NormalizeObservationWrapper,
     RewardScalingWrapper,
     make_env,
@@ -161,3 +162,38 @@ def test_set_global_seed_reproducibility():
     set_global_seed(42)
     b = np.random.randn(5)
     np.testing.assert_array_equal(a, b)
+
+
+# ---------------------------------------------------------------------------
+# GaussianObservationNoise
+# ---------------------------------------------------------------------------
+
+
+def test_observation_noise_zero_sigma_is_identity():
+    clean, noisy = _make_cartpole(), GaussianObservationNoise(_make_cartpole(), sigma=0.0, seed=1)
+    a, _ = clean.reset(seed=3)
+    b, _ = noisy.reset(seed=3)
+    np.testing.assert_array_equal(a, b)
+    assert b.dtype == a.dtype
+
+
+def test_observation_noise_has_requested_spread_per_dimension():
+    sigma = np.array([0.0, 0.1, 1.0, 5.0])
+    env = GaussianObservationNoise(_make_cartpole(), sigma=sigma, seed=0)
+    base, _ = env.env.reset(seed=0)
+    samples = np.array([env.observation(base) - base for _ in range(4000)])
+    np.testing.assert_allclose(samples.std(axis=0), sigma, rtol=0.05, atol=1e-6)
+    np.testing.assert_allclose(samples.mean(axis=0), 0, atol=0.2)
+
+
+def test_observation_noise_is_reproducible_and_leaves_the_true_state_alone():
+    a = GaussianObservationNoise(_make_cartpole(), sigma=0.5, seed=7)
+    b = GaussianObservationNoise(_make_cartpole(), sigma=0.5, seed=7)
+    obs_a, _ = a.reset(seed=1)
+    obs_b, _ = b.reset(seed=1)
+    np.testing.assert_array_equal(obs_a, obs_b)
+    assert not np.allclose(obs_a, a.unwrapped.state)  # the agent sees noise…
+    # …but the physics keep evolving from the clean state.
+    clean = _make_cartpole()
+    clean.reset(seed=1)
+    np.testing.assert_allclose(a.unwrapped.state, clean.unwrapped.state)
