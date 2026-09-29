@@ -14,10 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import gymnasium as gym
 
-from scripts.train import ENVS, build_agent
-from src.environments.utils import get_env_dims
+from scripts.train import ENVS, load_trained_agent
 from src.evaluation.plotting import plot_seeds_by_steps
 from src.evaluation.recording import record_episode
 
@@ -67,11 +65,7 @@ def best_run(runs: list) -> dict:
 
 
 def render_gif(run: dict, path: Path) -> float:
-    env = gym.make(run["env_id"])
-    obs_dim, action_dim = get_env_dims(env)
-    env.close()
-    agent = build_agent(run["algo"], obs_dim, action_dim, run["hyperparams"])
-    agent.load(RESULTS / "models" / f"{run['algo']}_{run['env']}_seed{run['seed']}.pt")
+    agent = load_trained_agent(run, RESULTS)
     return record_episode(agent, run["env_id"], path, seed=run["seed"], deterministic=best_mode(run)[1])
 
 
