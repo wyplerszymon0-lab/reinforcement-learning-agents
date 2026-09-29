@@ -61,6 +61,24 @@ DQN on CartPole also oscillated and collapsed when it took a gradient step on ev
 environment step (greedy eval 138–170 after 500k steps). Updating every 4 steps
 (`train_freq: 4`) made learning monotonic: 310–500.
 
+
+### Robustness to sensor noise
+
+How do the trained policies cope when their observations are noisy, as real sensors are? [`scripts/robustness.py`](scripts/robustness.py) adds Gaussian noise to every observation, scaled per dimension to the spread of that reading in clean episodes, and replays every seed greedily ([full table](results/ROBUSTNESS.md)):
+
+![Return vs observation noise](results/plots/robustness.png)
+
+| Mean return (3 seeds) | clean | 0.2σ | 0.5σ | 1σ |
+| :--- | ---: | ---: | ---: | ---: |
+| LunarLander · DQN | **220** | 140 | 54 | 1 |
+| LunarLander · PPO | 143 | **153** | **154** | **94** |
+| CartPole · DQN | 414 | 417 | 394 | 329 |
+| CartPole · PPO | **500** | **500** | **500** | **459** |
+
+- **The best clean policy is not the most robust one.** On LunarLander DQN wins without noise but falls apart as noise grows: −36% at 0.2σ, −75% at 0.5σ. PPO barely moves up to 0.5σ, and the two cross between 0.1σ and 0.2σ.
+- **PPO on CartPole shrugs off noise** up to half a standard deviation on every reading.
+- A plausible reason, not tested here: PPO is trained on a stochastic policy that already has to act well under its own randomness, while greedy DQN picks the argmax of Q-values that can flip with small input changes.
+
 ---
 
 
@@ -164,7 +182,8 @@ $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l
 ├── tests/                      # 75 pytest tests
 ├── scripts/
 │   ├── train.py                # train one algo/env/seed from config.yaml
-│   └── make_report.py          # plots, GIFs and RESULTS.md from all runs
+│   ├── make_report.py          # plots, GIFs and RESULTS.md from all runs
+│   └── robustness.py           # evaluation under observation noise
 ├── notebooks/
 │   └── dqn_vs_ppo_comparison.ipynb
 ├── results/
