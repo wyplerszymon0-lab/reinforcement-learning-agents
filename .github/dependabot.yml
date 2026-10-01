@@ -1,0 +1,19 @@
+# Keeps dependencies current: https://docs.github.com/code-security/dependabot
+version: 2
+updates:
+  # requirements use lower bounds (>=), so only raise one when a fix needs it.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: increase-if-necessary
+    groups:
+      python:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
