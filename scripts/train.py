@@ -27,6 +27,7 @@ from src.environments.utils import get_env_dims, set_global_seed
 from src.environments.wrappers import make_env
 from src.evaluation.evaluator import Evaluator
 from src.training.callbacks import CallbackList, EarlyStoppingCallback
+from src.training.loggers import TensorBoardLogger
 from src.training.trainer import DQNTrainer, PPOTrainer
 
 ROOT = Path(__file__).parent.parent
@@ -76,7 +77,14 @@ def solved_at_step(rewards, steps, threshold, window=100):
     return None
 
 
-def run(env_name: str, algo: str, seed: int, timesteps: int | None, out_dir: Path) -> dict:
+def run(
+    env_name: str,
+    algo: str,
+    seed: int,
+    timesteps: int | None,
+    out_dir: Path,
+    tensorboard_dir: Path | None = None,
+) -> dict:
     env_id, threshold = ENVS[env_name]
     hp = load_hyperparams(algo, env_name)
     if timesteps is not None:
@@ -87,6 +95,9 @@ def run(env_name: str, algo: str, seed: int, timesteps: int | None, out_dir: Pat
     obs_dim, action_dim = get_env_dims(env)
     agent = build_agent(algo, obs_dim, action_dim, hp)
 
+    name = f"{algo}_{env_name}_seed{seed}"
+    logger = TensorBoardLogger(tensorboard_dir / name) if tensorboard_dir else None
+
     trainer_cls = DQNTrainer if algo == "dqn" else PPOTrainer
     trainer = trainer_cls(
         agent=agent,
@@ -96,11 +107,16 @@ def run(env_name: str, algo: str, seed: int, timesteps: int | None, out_dir: Pat
         callbacks=CallbackList([EarlyStoppingCallback(reward_threshold=threshold)]),
         # progress line roughly every 20k environment steps
         log_interval=20_000 if algo == "dqn" else max(1, 20_000 // hp["num_steps"]),
+        logger=logger,
     )
 
     print(f"[{algo}/{env_name}/seed{seed}] training for up to {hp['total_timesteps']:,} steps", flush=True)
     start = time.time()
-    metrics = trainer.train()
+    try:
+        metrics = trainer.train()
+    finally:
+        if logger:
+            logger.close()
     wall_time = time.time() - start
     env.close()
 
@@ -112,7 +128,6 @@ def run(env_name: str, algo: str, seed: int, timesteps: int | None, out_dir: Pat
     sampled = evaluator.evaluate(agent, deterministic=False) if algo == "ppo" else None
     eval_env.close()
 
-    name = f"{algo}_{env_name}_seed{seed}"
     agent.save(out_dir / "models" / f"{name}.pt")
 
     result = {
@@ -153,10 +168,14 @@ def main():
     parser.add_argument("--timesteps", type=int, help="override total_timesteps from config.yaml")
     parser.add_argument("--out", type=Path, default=ROOT / "results")
     parser.add_argument("--threads", type=int, default=1, help="torch CPU threads (small nets: 1 is fastest)")
+    parser.add_argument(
+        "--tensorboard", nargs="?", type=Path, const=ROOT / "logs" / "tensorboard", default=None,
+        metavar="DIR", help="also write TensorBoard scalars (default DIR: logs/tensorboard/)",
+    )
     args = parser.parse_args()
 
     torch.set_num_threads(args.threads)
-    run(args.env, args.algo, args.seed, args.timesteps, args.out)
+    run(args.env, args.algo, args.seed, args.timesteps, args.out, args.tensorboard)
 
 
 if __name__ == "__main__":

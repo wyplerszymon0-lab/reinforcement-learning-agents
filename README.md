@@ -175,7 +175,8 @@ $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l
 │   ├── training/
 │   │   ├── replay_buffer.py    # ReplayBuffer (off-policy), RolloutBuffer (on-policy)
 │   │   ├── trainer.py          # DQNTrainer, PPOTrainer with metric logging
-│   │   └── callbacks.py        # EarlyStopping, Logging callbacks
+│   │   ├── callbacks.py        # EarlyStopping, Logging callbacks
+│   │   └── loggers.py          # optional TensorBoard scalar logger
 │   └── evaluation/
 │       ├── evaluator.py        # Greedy evaluation with trajectory collection
 │       └── plotting.py         # Training curves, comparisons, distributions
@@ -219,9 +220,32 @@ python scripts/make_report.py
 # Watch a trained agent play in a window (best seed unless --seed is given)
 python scripts/enjoy.py --env lunarlander --algo dqn
 
+# Also log training curves to TensorBoard (logs/tensorboard/<algo>_<env>_seed<N>/)
+python scripts/train.py --env cartpole --algo ppo --seed 1 --tensorboard
+tensorboard --logdir logs/tensorboard
+
 # Interactive comparison notebook
 jupyter notebook notebooks/dqn_vs_ppo_comparison.ipynb
 ```
+
+### TensorBoard
+
+With `--tensorboard`, training writes TensorBoard scalars next to the usual JSON results. Every point uses the environment step as its x-axis, so DQN and PPO runs line up:
+
+| Tag | DQN | PPO |
+| :--- | :---: | :---: |
+| `episode/return`, `episode/length` | every episode | every episode |
+| `train/loss` | mean over each 1 000 steps | — |
+| `train/epsilon` | every 1 000 steps | — |
+| `train/policy_loss`, `train/value_loss` | — | every update |
+| `train/entropy` (mean policy entropy) | — | every update |
+| `train/approx_kl`, `train/clip_fraction` | — | every update |
+
+![TensorBoard scalars for a short DQN and PPO run on CartPole](results/plots/tensorboard.png)
+
+<sub>Two short CartPole demo runs (60 000 steps, seed 1) made to show the logging, not the runs in the results table above. PPO's KL and entropy shrink as its policy settles; DQN's epsilon decays linearly while its loss grows with the size of the bootstrapped targets.</sub>
+
+The `tensorboard` package is optional (`pip install -e ".[tensorboard]"`, included in `dev`); without the flag nothing changes.
 
 ---
 

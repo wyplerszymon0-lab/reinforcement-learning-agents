@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y swig
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install "gymnasium[box2d]>=1.0" numpy matplotlib pyyaml imageio pytest mypy
+          pip install "gymnasium[box2d]>=1.0" numpy matplotlib pyyaml imageio tensorboard pytest mypy
       - name: Test
         run: pytest -q
       - name: Type check
