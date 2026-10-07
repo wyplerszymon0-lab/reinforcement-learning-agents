@@ -4,6 +4,7 @@ numpy>=1.24.0
 matplotlib>=3.7.0
 pyyaml>=6.0
 imageio>=2.30
+tensorboard>=2.14
 pytest>=7.4.0
 pytest-cov>=4.1.0
 mypy>=1.10

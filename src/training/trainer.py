@@ -19,6 +19,11 @@ import numpy as np
 from src.agents.dqn import DQNAgent
 from src.agents.ppo import PPOAgent
 from src.training.callbacks import CallbackList
+from src.training.loggers import ScalarLogger
+
+# DQN updates every few steps; its loss and epsilon are averaged over this many
+# environment steps before they are logged, so the event file stays small.
+DQN_SCALAR_EVERY = 1_000
 
 
 @dataclass
@@ -56,6 +61,7 @@ class DQNTrainer:
         checkpoint_dir: Optional[Path] = None,
         callbacks: Optional[CallbackList] = None,
         verbose: bool = True,
+        logger: Optional[ScalarLogger] = None,
     ) -> None:
         self.agent = agent
         self.env = env
@@ -65,6 +71,7 @@ class DQNTrainer:
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else Path("checkpoints")
         self.callbacks = callbacks or CallbackList([])
         self.verbose = verbose
+        self.logger = logger
         self.metrics = TrainingMetrics()
         self.stop_training = False
 
@@ -73,6 +80,7 @@ class DQNTrainer:
         episode_reward = 0.0
         episode_length = 0
         best_mean_reward = float("-inf")
+        recent_losses: List[float] = []
 
         self.callbacks.on_training_start(self)
         start_time = time.time()
@@ -94,6 +102,9 @@ class DQNTrainer:
 
             if done:
                 self.metrics.log_episode(episode_reward, episode_length, step)
+                if self.logger:
+                    self.logger.scalar("episode/return", episode_reward, step)
+                    self.logger.scalar("episode/length", episode_length, step)
                 self.callbacks.on_episode_end(self, episode_reward, episode_length)
                 obs, _ = self.env.reset()
                 episode_reward = 0.0
@@ -104,6 +115,13 @@ class DQNTrainer:
             update_metrics = self.agent.update()
             if update_metrics and "loss" in update_metrics:
                 self.metrics.log_loss(update_metrics["loss"])
+                recent_losses.append(update_metrics["loss"])
+
+            if self.logger and step % DQN_SCALAR_EVERY == 0:
+                self.logger.scalar("train/epsilon", self.agent.epsilon, step)
+                if recent_losses:
+                    self.logger.scalar("train/loss", float(np.mean(recent_losses)), step)
+                    recent_losses.clear()
 
             if self.verbose and step % self.log_interval == 0:
                 mean_r = self.metrics.mean_reward_last_n
@@ -141,6 +159,7 @@ class PPOTrainer:
         checkpoint_dir: Optional[Path] = None,
         callbacks: Optional[CallbackList] = None,
         verbose: bool = True,
+        logger: Optional[ScalarLogger] = None,
     ) -> None:
         self.agent = agent
         self.env = env
@@ -150,6 +169,7 @@ class PPOTrainer:
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else Path("checkpoints")
         self.callbacks = callbacks or CallbackList([])
         self.verbose = verbose
+        self.logger = logger
         self.metrics = TrainingMetrics()
         self.stop_training = False
 
@@ -182,6 +202,9 @@ class PPOTrainer:
 
                 if step_done:
                     self.metrics.log_episode(episode_reward, episode_length, self.agent.total_steps)
+                    if self.logger:
+                        self.logger.scalar("episode/return", episode_reward, self.agent.total_steps)
+                        self.logger.scalar("episode/length", episode_length, self.agent.total_steps)
                     self.callbacks.on_episode_end(self, episode_reward, episode_length)
                     obs, _ = self.env.reset()
                     done = False
@@ -193,6 +216,18 @@ class PPOTrainer:
 
             if "policy_loss" in update_metrics:
                 self.metrics.log_loss(update_metrics["policy_loss"])
+
+            if self.logger and update_metrics:
+                # entropy_loss is the mean policy entropy (subtracted in the loss), not its negative
+                for tag, key in (
+                    ("train/policy_loss", "policy_loss"),
+                    ("train/value_loss", "value_loss"),
+                    ("train/entropy", "entropy_loss"),
+                    ("train/approx_kl", "approx_kl"),
+                    ("train/clip_fraction", "clip_fraction"),
+                ):
+                    if key in update_metrics:
+                        self.logger.scalar(tag, update_metrics[key], self.agent.total_steps)
 
             if self.verbose and update % self.log_interval == 0:
                 mean_r = self.metrics.mean_reward_last_n
