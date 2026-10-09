@@ -9,6 +9,7 @@ Usage:
     python scripts/train.py --env lunarlander --algo ppo --seed 2
 """
 import argparse
+from typing import Any
 import json
 import sys
 import time
@@ -24,7 +25,7 @@ import yaml
 from src.agents.dqn import DQNAgent
 from src.agents.ppo import PPOAgent
 from src.environments.utils import get_env_dims, set_global_seed
-from src.environments.wrappers import make_env
+from src.environments.wrappers import make_env, make_vec_env
 from src.evaluation.evaluator import Evaluator
 from src.training.callbacks import CallbackList, EarlyStoppingCallback
 from src.training.loggers import TensorBoardLogger
@@ -84,6 +85,7 @@ def run(
     timesteps: int | None,
     out_dir: Path,
     tensorboard_dir: Path | None = None,
+    num_envs: int = 1,
 ) -> dict:
     env_id, threshold = ENVS[env_name]
     hp = load_hyperparams(algo, env_name)
@@ -91,8 +93,17 @@ def run(
         hp["total_timesteps"] = timesteps
 
     set_global_seed(seed)
-    env = make_env(env_id, seed=seed)
-    obs_dim, action_dim = get_env_dims(env)
+    env: Any  # one gym.Env, or a vector of them for PPO
+    if num_envs > 1:
+        if algo != "ppo":
+            raise ValueError("--num-envs > 1 is for PPO; DQN learns from a replay buffer, one step at a time")
+        # Same number of transitions per update as with one env: num_steps is per copy.
+        hp = dict(hp, num_envs=num_envs, num_steps=hp["num_steps"] // num_envs)
+        env = make_vec_env(env_id, num_envs, seed=seed)
+        obs_dim, action_dim = get_env_dims(env.envs[0])
+    else:
+        env = make_env(env_id, seed=seed)
+        obs_dim, action_dim = get_env_dims(env)
     agent = build_agent(algo, obs_dim, action_dim, hp)
 
     name = f"{algo}_{env_name}_seed{seed}"
@@ -168,6 +179,7 @@ def main():
     parser.add_argument("--timesteps", type=int, help="override total_timesteps from config.yaml")
     parser.add_argument("--out", type=Path, default=ROOT / "results")
     parser.add_argument("--threads", type=int, default=1, help="torch CPU threads (small nets: 1 is fastest)")
+    parser.add_argument("--num-envs", type=int, default=1, help="PPO only: environment copies stepped together")
     parser.add_argument(
         "--tensorboard", nargs="?", type=Path, const=ROOT / "logs" / "tensorboard", default=None,
         metavar="DIR", help="also write TensorBoard scalars (default DIR: logs/tensorboard/)",
@@ -175,7 +187,7 @@ def main():
     args = parser.parse_args()
 
     torch.set_num_threads(args.threads)
-    run(args.env, args.algo, args.seed, args.timesteps, args.out, args.tensorboard)
+    run(args.env, args.algo, args.seed, args.timesteps, args.out, args.tensorboard, args.num_envs)
 
 
 if __name__ == "__main__":

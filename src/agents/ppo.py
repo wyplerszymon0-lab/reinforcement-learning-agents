@@ -24,7 +24,7 @@ but helps stability.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 import torch
@@ -58,6 +58,7 @@ class PPOAgent(BaseAgent):
         anneal_lr: bool = True,
         total_timesteps: int = 1_000_000,
         device: Optional[torch.device] = None,
+        num_envs: int = 1,
     ) -> None:
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -77,16 +78,18 @@ class PPOAgent(BaseAgent):
         self.target_kl = target_kl
         self.anneal_lr = anneal_lr
         self.total_timesteps = total_timesteps
-        self.batch_size = num_steps
-        self.minibatch_size = num_steps // num_minibatches
-        self._num_updates = total_timesteps // num_steps
+        # num_steps is per environment; one update learns from num_steps * num_envs transitions.
+        self.num_envs = num_envs
+        self.batch_size = num_steps * num_envs
+        self.minibatch_size = self.batch_size // num_minibatches
+        self._num_updates = total_timesteps // self.batch_size
 
         self.network = ActorCriticNetwork(obs_dim, action_dim, hidden_dims).to(device)
         self.optimizer = optim.Adam(self.network.parameters(), lr=lr, eps=1e-5)
         self._actor_params = [*self.network.actor_trunk.parameters(), *self.network.actor_head.parameters()]
         self._critic_params = [*self.network.critic_trunk.parameters(), *self.network.critic_head.parameters()]
         self._initial_lr = lr
-        self.rollout_buffer = RolloutBuffer(num_steps, obs_dim, device)
+        self.rollout_buffer = RolloutBuffer(num_steps, obs_dim, device, num_envs)
 
     # ------------------------------------------------------------------
     # Action selection
@@ -111,25 +114,37 @@ class PPOAgent(BaseAgent):
             action, log_prob, _, value = self.network.get_action_and_value(obs_t)
         return int(action.item()), float(log_prob.item()), float(value.item())
 
+    def act_batch(self, obs: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """For a vector of environments: (actions, log_probs, values), one per environment."""
+        with torch.no_grad():
+            obs_t = torch.as_tensor(np.asarray(obs, dtype=np.float32), device=self.device)
+            action, log_prob, _, value = self.network.get_action_and_value(obs_t)
+        return action.cpu().numpy(), log_prob.cpu().numpy(), value.reshape(-1).cpu().numpy()
+
     def observe(
         self,
         state: np.ndarray,
-        action: int,
-        reward: float,
-        value: float,
-        log_prob: float,
-        done: bool,
+        action: Any,
+        reward: Any,
+        value: Any,
+        log_prob: Any,
+        done: Any,
     ) -> None:
+        """One time step: scalars for one environment, arrays of length num_envs for a vector."""
         self.rollout_buffer.push(state, action, reward, value, log_prob, done)
-        self.total_steps += 1
+        self.total_steps += self.num_envs
 
-    def finish_rollout(self, last_obs: np.ndarray, last_done: bool) -> None:
-        """Bootstrap value for the last state and compute GAE."""
+    def finish_rollout(self, last_obs: np.ndarray, last_done: Any) -> None:
+        """Bootstrap the value of the last state(s) and compute GAE.
+
+        One environment: last_obs is one observation and last_done a bool. A vector:
+        last_obs has shape (num_envs, obs_dim) and last_done one flag per environment.
+        """
+        obs = np.asarray(last_obs, dtype=np.float32).reshape(self.num_envs, -1)
         with torch.no_grad():
-            last_value = float(
-                self.network.get_value(self._obs_to_tensor(last_obs)).item()
-            ) * (1.0 - float(last_done))
-        self.rollout_buffer.compute_gae(last_value, self.gamma, self.gae_lambda)
+            values = self.network.get_value(torch.as_tensor(obs, device=self.device)).reshape(-1).cpu().numpy()
+        not_done = 1.0 - np.asarray(last_done, dtype=np.float32).reshape(self.num_envs)
+        self.rollout_buffer.compute_gae(values * not_done, self.gamma, self.gae_lambda)
 
     # ------------------------------------------------------------------
     # Learning

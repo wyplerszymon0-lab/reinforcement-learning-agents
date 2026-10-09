@@ -152,7 +152,7 @@ class PPOTrainer:
     def __init__(
         self,
         agent: PPOAgent,
-        env: gym.Env,
+        env: gym.Env | gym.vector.VectorEnv,
         total_timesteps: int = 1_000_000,
         log_interval: int = 1,
         checkpoint_interval: int = 10,
@@ -174,12 +174,21 @@ class PPOTrainer:
         self.stop_training = False
 
     def train(self) -> TrainingMetrics:
-        obs, _ = self.env.reset()
-        done = False
-        episode_reward = 0.0
-        episode_length = 0
+        # A gymnasium vector env runs agent.num_envs copies in lockstep; a plain env is one copy.
+        env = self.env
+        self._vector = isinstance(env, gym.vector.VectorEnv)
+        n = self.agent.num_envs
+        if isinstance(env, gym.vector.VectorEnv) and env.num_envs != n:
+            raise ValueError(f"env has {env.num_envs} copies but the agent was built for {n}")
+        if not self._vector and n != 1:
+            raise ValueError(f"agent was built for {n} environments; pass a gymnasium vector env")
+
+        self._obs, _ = self.env.reset()
+        self._done: Any = np.zeros(n, dtype=bool) if self._vector else False
+        self._ep_return = np.zeros(n)
+        self._ep_length = np.zeros(n, dtype=np.int64)
         best_mean_reward = float("-inf")
-        num_updates = self.total_timesteps // self.agent.num_steps
+        num_updates = self.total_timesteps // self.agent.batch_size
 
         self.callbacks.on_training_start(self)
         start_time = time.time()
@@ -187,31 +196,13 @@ class PPOTrainer:
         for update in range(1, num_updates + 1):
             if self.stop_training:
                 break
-            # Collect rollout
             for _ in range(self.agent.num_steps):
-                action, log_prob, value = self.agent.act_with_extras(obs)
-                next_obs, reward, terminated, truncated, info = self.env.step(action)
-                step_done = terminated or truncated
+                if self._vector:
+                    self._step_vector()
+                else:
+                    self._step_single()
 
-                self.agent.observe(obs, action, float(reward), value, log_prob, step_done)
-
-                episode_reward += float(reward)
-                episode_length += 1
-                obs = next_obs
-                done = step_done
-
-                if step_done:
-                    self.metrics.log_episode(episode_reward, episode_length, self.agent.total_steps)
-                    if self.logger:
-                        self.logger.scalar("episode/return", episode_reward, self.agent.total_steps)
-                        self.logger.scalar("episode/length", episode_length, self.agent.total_steps)
-                    self.callbacks.on_episode_end(self, episode_reward, episode_length)
-                    obs, _ = self.env.reset()
-                    done = False
-                    episode_reward = 0.0
-                    episode_length = 0
-
-            self.agent.finish_rollout(obs, done)
+            self.agent.finish_rollout(self._obs, self._done)
             update_metrics = self.agent.update()
 
             if "policy_loss" in update_metrics:
@@ -253,3 +244,38 @@ class PPOTrainer:
 
         self.callbacks.on_training_end(self)
         return self.metrics
+
+    def _end_episode(self, reward: float, length: int) -> None:
+        self.metrics.log_episode(reward, length, self.agent.total_steps)
+        if self.logger:
+            self.logger.scalar("episode/return", reward, self.agent.total_steps)
+            self.logger.scalar("episode/length", length, self.agent.total_steps)
+        self.callbacks.on_episode_end(self, reward, length)
+
+    def _step_single(self) -> None:
+        action, log_prob, value = self.agent.act_with_extras(self._obs)
+        next_obs, reward, terminated, truncated, _ = self.env.step(action)
+        done = bool(terminated or truncated)
+        self.agent.observe(self._obs, action, float(reward), value, log_prob, done)
+        self._ep_return[0] += float(reward)
+        self._ep_length[0] += 1
+        self._obs, self._done = next_obs, done
+        if done:
+            self._end_episode(float(self._ep_return[0]), int(self._ep_length[0]))
+            self._obs, _ = self.env.reset()
+            self._done = False
+            self._ep_return[0], self._ep_length[0] = 0.0, 0
+
+    def _step_vector(self) -> None:
+        # The vector env resets finished copies within the same step (AutoresetMode.SAME_STEP,
+        # see make_vec_env), so next_obs already starts the next episode where done is set.
+        actions, log_probs, values = self.agent.act_batch(self._obs)
+        next_obs, rewards, terminated, truncated, _ = self.env.step(actions)
+        dones = np.logical_or(terminated, truncated)
+        self.agent.observe(self._obs, actions, rewards, values, log_probs, dones)
+        self._ep_return += np.asarray(rewards, dtype=np.float64)
+        self._ep_length += 1
+        for i in np.flatnonzero(dones):
+            self._end_episode(float(self._ep_return[i]), int(self._ep_length[i]))
+            self._ep_return[i], self._ep_length[i] = 0.0, 0
+        self._obs, self._done = next_obs, dones

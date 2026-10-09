@@ -224,6 +224,10 @@ python scripts/enjoy.py --env lunarlander --algo dqn
 python scripts/train.py --env cartpole --algo ppo --seed 1 --tensorboard
 tensorboard --logdir logs/tensorboard
 
+# PPO on 8 environment copies at once (faster collection, same batch per update)
+python scripts/train.py --env lunarlander --algo ppo --seed 1 --num-envs 8
+python scripts/bench_vector.py --env lunarlander --envs 1 4 8   # measure it
+
 # Interactive comparison notebook
 jupyter notebook notebooks/dqn_vs_ppo_comparison.ipynb
 ```
@@ -246,6 +250,21 @@ With `--tensorboard`, training writes TensorBoard scalars next to the usual JSON
 <sub>Two short CartPole demo runs (60 000 steps, seed 1) made to show the logging, not the runs in the results table above. PPO's KL and entropy shrink as its policy settles; DQN's epsilon decays linearly while its loss grows with the size of the bootstrapped targets.</sub>
 
 The `tensorboard` package is optional (`pip install -e ".[tensorboard]"`, included in `dev`); without the flag nothing changes.
+
+### Vectorised environments for PPO
+
+`--num-envs N` runs N copies of the environment in a `gymnasium.vector.SyncVectorEnv` and PPO collects from all of them at once: one forward pass picks N actions, and GAE runs over a `(steps, envs)` array. `num_steps` from `config.yaml` is divided by N, so every update still learns from the same number of transitions; only the collection changes. Finished copies are reset within the same step (`AutoresetMode.SAME_STEP`); gymnasium's default would insert a no-op step after every episode.
+
+Training throughput, `scripts/bench_vector.py` (median of 3 seeds, one CPU thread, AMD Ryzen 5 220):
+
+| Environment | N = 1 | N = 2 | N = 4 | N = 8 |
+| :--- | ---: | ---: | ---: | ---: |
+| CartPole-v1 (60k steps) | 909 steps/s | 1 198 (×1.32) | 1 446 (×1.59) | 1 697 (×1.87) |
+| LunarLander-v3 (40k steps) | 1 424 steps/s | — | 3 406 (×2.39) | 4 809 (×3.38) |
+
+LunarLander gains more because each step costs more to decide than to simulate: batching the network's forward pass pays off. The results table above was trained with one environment; `--num-envs` defaults to 1.
+
+A vector of one environment reproduces a single-environment run exactly (same episodes, same steps), which a test checks; others check that GAE over N copies equals GAE of each copy on its own, and that with 4 copies no step is lost or counted twice when copies end episodes at different times.
 
 ---
 

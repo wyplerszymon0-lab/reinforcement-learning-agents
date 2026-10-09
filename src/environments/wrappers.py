@@ -148,3 +148,16 @@ def make_env(
     env.reset(seed=seed)
     env.action_space.seed(seed)
     return env
+
+
+def make_vec_env(env_id: str, num_envs: int, seed: int = 0, **kwargs: Any) -> gym.vector.SyncVectorEnv:
+    """num_envs copies of make_env(...) stepped together, copy i seeded with seed + i.
+
+    Finished copies are reset within the same step (AutoresetMode.SAME_STEP), so every
+    stored transition is a real one; the default NEXT_STEP mode would add a no-op
+    step after each episode end.
+    """
+    fns = [lambda i=i: make_env(env_id, seed=seed + i, **kwargs) for i in range(num_envs)]
+    vec = gym.vector.SyncVectorEnv(fns, autoreset_mode=gym.vector.AutoresetMode.SAME_STEP)
+    vec.reset(seed=[seed + i for i in range(num_envs)])
+    return vec
