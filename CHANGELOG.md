@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- PPO on LunarLander retuned: 16 environments x 1,024 steps per update in minibatches
+  of 64, no value-loss clipping, entropy coefficient 0.005, 2M step budget. Solves
+  3/3 seeds (was 1/3) and 3/3 fresh seeds; the tuning history is in
+  `results/RESULTS.md` (#2).
+- `num_envs` can be set in `config.yaml`; `--num-envs` still overrides it.
+
 ## [1.0.0] - 2026-10-01
 
 First tagged release: DQN and PPO implemented from scratch in PyTorch, trained and

@@ -83,3 +83,20 @@ def test_train_script_num_envs(tmp_path):
     assert result["hyperparams"]["num_steps"] * 4 == train.load_hyperparams("ppo", "cartpole")["num_steps"]
     with pytest.raises(ValueError, match="PPO"):
         train.run("cartpole", "dqn", seed=0, timesteps=1_000, out_dir=tmp_path, num_envs=2)
+
+
+def test_config_can_set_num_envs(tmp_path, monkeypatch):
+    real = train.load_hyperparams
+    monkeypatch.setattr(train, "load_hyperparams", lambda algo, env: dict(real(algo, env), num_envs=2))
+    result = train.run("cartpole", "ppo", seed=0, timesteps=1_024, out_dir=tmp_path)
+    assert result["hyperparams"]["num_envs"] == 2
+    assert result["hyperparams"]["num_steps"] * 2 == real("ppo", "cartpole")["num_steps"]
+    # --num-envs on the command line wins over the config
+    result = train.run("cartpole", "ppo", seed=0, timesteps=1_024, out_dir=tmp_path, num_envs=4)
+    assert result["hyperparams"]["num_envs"] == 4
+
+
+def test_lunarlander_ppo_config_splits_evenly():
+    hp = train.load_hyperparams("ppo", "lunarlander")
+    assert hp["num_steps"] % hp["num_envs"] == 0  # whole steps per env copy
+    assert hp["num_steps"] % hp["num_minibatches"] == 0  # equal minibatches

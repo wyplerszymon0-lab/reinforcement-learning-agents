@@ -27,6 +27,7 @@ from src.training.trainer import PPOTrainer  # noqa: E402
 def steps_per_second(env_name: str, num_envs: int, steps: int, seed: int = 0) -> float:
     env_id, _ = ENVS[env_name]
     hp = dict(load_hyperparams("ppo", env_name), total_timesteps=steps)
+    hp.pop("num_envs", None)  # the benchmark sets it
     set_global_seed(seed)
     env: Any  # one gym.Env, or a vector of them
     if num_envs > 1:

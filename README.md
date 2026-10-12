@@ -21,7 +21,7 @@ Every configuration was trained with **3 seeds** and evaluated on 100 fresh epis
 | CartPole-v1 | DQN | 1/3 | 464k | 429.7 ± 104.0 | — |
 | CartPole-v1 | PPO | 2/3 | 410k | 500.0 ± 0.0 | 488.6 ± 8.0 |
 | LunarLander-v3 | DQN | 3/3 | 163k | 217.5 ± 4.5 | — |
-| LunarLander-v3 | PPO | 1/3 | 698k | 146.2 ± 52.1 | 128.7 ± 39.2 |
+| LunarLander-v3 | PPO | 3/3 | 704k | 239.9 ± 6.5 | 243.5 ± 8.4 |
 
 *Solved* = the trailing 100-episode training return reached the official threshold
 (CartPole 475, LunarLander 200); training stops there. *Sampled eval* samples actions
@@ -35,8 +35,10 @@ A seed that stopped early (solved) is held at its final value.</sub>
 
 **Takeaways**
 
-- **DQN is the clear winner on LunarLander**: all 3 seeds solve it in 118k–199k steps,
-  about 4× fewer environment steps than the one PPO seed that got there.
+- **Both solve LunarLander on every seed; DQN needs far fewer steps.** DQN solves it in
+  118k–199k environment steps, tuned PPO in 659k–828k, about 4× more. PPO ends with the
+  better policy (greedy eval 240 vs 218) and finishes faster in wall time, because it
+  steps 16 environments at once.
 - **PPO dominates CartPole early** (return ~270 after 50k steps, DQN ~40), and its
   greedy policy balances perfectly (500/500) on every seed.
 - **DQN on CartPole is the least stable combination**: one seed solves it, the others
@@ -61,10 +63,40 @@ DQN on CartPole also oscillated and collapsed when it took a gradient step on ev
 environment step (greedy eval 138–170 after 500k steps). Updating every 4 steps
 (`train_freq: 4`) made learning monotonic: 310–500.
 
+### Tuning PPO on LunarLander: 1/3 → 3/3 seeds
+
+Until v1.0.0, PPO solved LunarLander on 1 seed of 3. Four changes, tried one at a time
+on the same 3 seeds ([full table](results/RESULTS.md#tuning-history-ppo_lunarlander)):
+
+| Change | Solved | Greedy eval per seed |
+| :--- | :---: | :--- |
+| v1.0.0: 1 env, 1,024 steps per update, minibatches of 256 | 1/3 | 96 / 143 / 200 |
+| 16 envs × 1,024 steps per update, minibatches of 64 (RL Zoo setting) | 0/3 | 100 / 161 / 119 |
+| + no value-loss clipping | 0/3 | 226 / 218 / 220 |
+| + entropy coefficient 0.01 → 0.005 | 2/3 | 120 / 228 / 218 |
+| + 2M step budget instead of 1M | **3/3** | 237 / 235 / 247 |
+
+- **The bigger batch alone made things worse.** With 16,384 transitions per update,
+  1M steps is only 61 updates, and the policy stalled around a return of 100.
+- **Value clipping was starving the critic.** It keeps each new value prediction within
+  ±0.2 of the old one, a sensible limit when returns are normalised, not when they are
+  in the hundreds. Without it the greedy policy cleared 200 on every seed, though
+  training (which samples actions) still averaged ~130.
+- **Less entropy bonus** let the sampled policy sharpen towards the greedy one, which is
+  what the "solved" criterion measures; and a 2M budget makes the learning rate decay
+  half as fast. All three tuning seeds still stopped before 1M steps.
+- **Checked on fresh seeds.** Each change was kept because it helped on seeds 1–3, so
+  those numbers flatter the setting. Seeds 4–6, never used for tuning, also solved
+  **3/3**: at 739k, 865k and 1,553k steps (greedy eval 222 / 243 / 232). The last one
+  needed more than 1M steps, so the larger budget matters. These runs are not in the
+  results table, which keeps seeds 1–3 like every other row.
+
 
 ### Robustness to sensor noise
 
 How do the trained policies cope when their observations are noisy, as real sensors are? [`scripts/robustness.py`](scripts/robustness.py) adds Gaussian noise to every observation, scaled per dimension to the spread of that reading in clean episodes, and replays every seed greedily ([full table](results/ROBUSTNESS.md)):
+
+> Measured on the v1.0.0 models, before PPO on LunarLander was retuned (then: 1/3 seeds solved, mean greedy eval 146; see "Tuning PPO on LunarLander" above). Re-running it needs all six DQN models, and only seed 1 of each is kept in the repo, so the PPO rows here describe the old policy.
 
 ![Return vs observation noise](results/plots/robustness.png)
 
@@ -262,7 +294,7 @@ Training throughput, `scripts/bench_vector.py` (median of 3 seeds, one CPU threa
 | CartPole-v1 (60k steps) | 909 steps/s | 1 198 (×1.32) | 1 446 (×1.59) | 1 697 (×1.87) |
 | LunarLander-v3 (40k steps) | 1 424 steps/s | — | 3 406 (×2.39) | 4 809 (×3.38) |
 
-LunarLander gains more because each step costs more to decide than to simulate: batching the network's forward pass pays off. The results table above was trained with one environment; `--num-envs` defaults to 1.
+LunarLander gains more because each step costs more to decide than to simulate: batching the network's forward pass pays off. PPO on LunarLander now trains on 16 copies (`num_envs` in `config.yaml`); elsewhere the default is 1, and `--num-envs` overrides either.
 
 A vector of one environment reproduces a single-environment run exactly (same episodes, same steps), which a test checks; others check that GAE over N copies equals GAE of each copy on its own, and that with 4 copies no step is lost or counted twice when copies end episodes at different times.
 
@@ -297,6 +329,7 @@ The most impactful hyperparameters by algorithm:
 1. `clip_coef` (ε) — controls the trust region size; 0.1–0.3 is the empirical range
 2. `gae_lambda` — bias/variance tradeoff; 0.95 is nearly universally good
 3. `num_steps` — rollout length; longer → more on-policy data but slower updates
+4. `clip_vloss` — measured here, not just folklore: with unnormalised LunarLander returns, turning value clipping off lifted greedy eval from 100–161 to 218–226 on all 3 seeds (see "Tuning PPO on LunarLander")
 
 ---
 
