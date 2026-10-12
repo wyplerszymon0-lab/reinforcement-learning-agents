@@ -85,12 +85,16 @@ def run(
     timesteps: int | None,
     out_dir: Path,
     tensorboard_dir: Path | None = None,
-    num_envs: int = 1,
+    num_envs: int | None = None,
 ) -> dict:
     env_id, threshold = ENVS[env_name]
     hp = load_hyperparams(algo, env_name)
     if timesteps is not None:
         hp["total_timesteps"] = timesteps
+
+    # --num-envs wins; otherwise config.yaml may set it (PPO LunarLander does).
+    num_envs = num_envs or hp.pop("num_envs", 1)
+    hp.pop("num_envs", None)
 
     set_global_seed(seed)
     env: Any  # one gym.Env, or a vector of them for PPO
@@ -179,7 +183,10 @@ def main():
     parser.add_argument("--timesteps", type=int, help="override total_timesteps from config.yaml")
     parser.add_argument("--out", type=Path, default=ROOT / "results")
     parser.add_argument("--threads", type=int, default=1, help="torch CPU threads (small nets: 1 is fastest)")
-    parser.add_argument("--num-envs", type=int, default=1, help="PPO only: environment copies stepped together")
+    parser.add_argument(
+        "--num-envs", type=int, default=None,
+        help="PPO only: environment copies stepped together (default: num_envs in config.yaml, else 1)",
+    )
     parser.add_argument(
         "--tensorboard", nargs="?", type=Path, const=ROOT / "logs" / "tensorboard", default=None,
         metavar="DIR", help="also write TensorBoard scalars (default DIR: logs/tensorboard/)",

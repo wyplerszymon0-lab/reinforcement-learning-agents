@@ -1,0 +1,152 @@
+[
+  {
+    "label": "Before (v1.0.0)",
+    "change": "1 env, 1,024 steps per update, minibatches of 256, ent_coef 0.01, value clipping, 1M steps",
+    "seeds": [
+      {
+        "seed": 1,
+        "total_steps": 999346,
+        "solved_at_step": null,
+        "greedy_eval": 95.6,
+        "sampled_eval": 121.0,
+        "final_trailing_return": 111.7
+      },
+      {
+        "seed": 2,
+        "total_steps": 999348,
+        "solved_at_step": null,
+        "greedy_eval": 143.4,
+        "sampled_eval": 94.0,
+        "final_trailing_return": 100.4
+      },
+      {
+        "seed": 3,
+        "total_steps": 698292,
+        "solved_at_step": 697910,
+        "greedy_eval": 199.6,
+        "sampled_eval": 171.1,
+        "final_trailing_return": 203.3
+      }
+    ]
+  },
+  {
+    "label": "Zoo batch",
+    "change": "16 envs x 1,024 steps per update, minibatches of 64",
+    "seeds": [
+      {
+        "seed": 1,
+        "total_steps": 998816,
+        "solved_at_step": null,
+        "greedy_eval": 100.1,
+        "sampled_eval": 105.2,
+        "final_trailing_return": 98.0
+      },
+      {
+        "seed": 2,
+        "total_steps": 998608,
+        "solved_at_step": null,
+        "greedy_eval": 160.7,
+        "sampled_eval": 105.4,
+        "final_trailing_return": 108.9
+      },
+      {
+        "seed": 3,
+        "total_steps": 998912,
+        "solved_at_step": null,
+        "greedy_eval": 119.1,
+        "sampled_eval": 100.8,
+        "final_trailing_return": 99.1
+      }
+    ]
+  },
+  {
+    "label": "+ no value clipping",
+    "change": "as above, clip_vloss false",
+    "seeds": [
+      {
+        "seed": 1,
+        "total_steps": 998832,
+        "solved_at_step": null,
+        "greedy_eval": 226.5,
+        "sampled_eval": 129.5,
+        "final_trailing_return": 126.5
+      },
+      {
+        "seed": 2,
+        "total_steps": 997920,
+        "solved_at_step": null,
+        "greedy_eval": 217.8,
+        "sampled_eval": 127.3,
+        "final_trailing_return": 128.1
+      },
+      {
+        "seed": 3,
+        "total_steps": 998976,
+        "solved_at_step": null,
+        "greedy_eval": 220.1,
+        "sampled_eval": 136.6,
+        "final_trailing_return": 138.3
+      }
+    ]
+  },
+  {
+    "label": "+ ent_coef 0.005",
+    "change": "as above, entropy coefficient 0.01 -> 0.005",
+    "seeds": [
+      {
+        "seed": 1,
+        "total_steps": 998912,
+        "solved_at_step": null,
+        "greedy_eval": 120.3,
+        "sampled_eval": 132.9,
+        "final_trailing_return": 130.9
+      },
+      {
+        "seed": 2,
+        "total_steps": 704400,
+        "solved_at_step": 691072,
+        "greedy_eval": 228.2,
+        "sampled_eval": 226.0,
+        "final_trailing_return": 218.6
+      },
+      {
+        "seed": 3,
+        "total_steps": 507760,
+        "solved_at_step": 505920,
+        "greedy_eval": 218.3,
+        "sampled_eval": 224.8,
+        "final_trailing_return": 202.4
+      }
+    ]
+  },
+  {
+    "label": "+ 2M step budget (final)",
+    "change": "as above, total_timesteps 2M (slower learning-rate decay; solved seeds stop early)",
+    "seeds": [
+      {
+        "seed": 1,
+        "total_steps": 835184,
+        "solved_at_step": 828304,
+        "greedy_eval": 237.1,
+        "sampled_eval": 251.9,
+        "final_trailing_return": 213.4
+      },
+      {
+        "seed": 2,
+        "total_steps": 671424,
+        "solved_at_step": 658976,
+        "greedy_eval": 235.2,
+        "sampled_eval": 243.6,
+        "final_trailing_return": 222.3
+      },
+      {
+        "seed": 3,
+        "total_steps": 703712,
+        "solved_at_step": 703552,
+        "greedy_eval": 247.3,
+        "sampled_eval": 235.1,
+        "final_trailing_return": 201.2
+      }
+    ]
+  }
+]

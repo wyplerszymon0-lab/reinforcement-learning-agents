@@ -69,6 +69,36 @@ def render_gif(run: dict, path: Path) -> float:
     return record_episode(agent, run["env_id"], path, seed=run["seed"], deterministic=best_mode(run)[1])
 
 
+def tuning_section(tuning_dir: Path) -> list[str]:
+    """One table per results/tuning/<algo>_<env>.json: every variant tried, in order."""
+    lines: list[str] = []
+    for path in sorted(tuning_dir.glob("*.json")):
+        variants = json.loads(path.read_text(encoding="utf-8"))
+        lines += [
+            "",
+            f"## Tuning history: `{path.stem}`",
+            "",
+            "Each row adds one change to the row above; 3 seeds each. *Final return* is the trailing "
+            "100-episode training return when training stopped.",
+            "",
+            "| Variant | Change | Solved | Solved at | Final return | Greedy eval | Sampled eval |",
+            "| :--- | :--- | :---: | :--- | :--- | :--- | :--- |",
+        ]
+        for v in variants:
+            seeds = v["seeds"]
+
+            def per_seed(key: str, fmt) -> str:
+                return " / ".join(fmt(s[key]) for s in seeds)
+
+            solved = sum(s["solved_at_step"] is not None for s in seeds)
+            lines.append(
+                f"| {v['label']} | {v['change']} | {solved}/{len(seeds)} | "
+                f"{per_seed('solved_at_step', fmt_steps)} | {per_seed('final_trailing_return', lambda x: f'{x:.0f}')} | "
+                f"{per_seed('greedy_eval', lambda x: f'{x:.0f}')} | {per_seed('sampled_eval', lambda x: f'{x:.0f}')} |"
+            )
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-gifs", action="store_true")
@@ -114,6 +144,8 @@ def main():
                     f"| {algo}_{env}_seed{r['seed']} | {r['total_steps']:,} | "
                     f"{fmt_steps(r['solved_at_step'])} | {ev['mean_reward']:.1f} ± {ev['std_reward']:.1f} | {sampled} |"
                 )
+
+    lines += tuning_section(RESULTS / "tuning")
 
     for env, (env_id, threshold) in ENVS.items():
         by_algo = {
