@@ -12,8 +12,4 @@ checkpoints/
 *.ipynb_checkpoints
 .venv/
 logs/
-results/models/*
-!results/models/dqn_cartpole_seed1.pt
-!results/models/ppo_cartpole_seed1.pt
-!results/models/dqn_lunarlander_seed1.pt
-!results/models/ppo_lunarlander_seed3.pt
+# results/models/ keeps every seed (12 files, ~14 MB): robustness.py needs all of them

@@ -13,6 +13,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
   3/3 seeds (was 1/3) and 3/3 fresh seeds; the tuning history is in
   `results/RESULTS.md` (#2).
 - `num_envs` can be set in `config.yaml`; `--num-envs` still overrides it.
+- All 12 trained models are kept in `results/models/`, and the noise-robustness study
+  is re-run on the current models: tuned PPO is now both the best clean policy and the
+  most robust on LunarLander. PPO CartPole was retrained with the current code (3/3
+  seeds solved, was 2/3); the DQN runs reproduced bit-for-bit (#17).
 
 ## [1.0.0] - 2026-10-01
 
