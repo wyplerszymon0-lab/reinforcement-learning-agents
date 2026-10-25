@@ -19,7 +19,7 @@ Every configuration was trained with **3 seeds** and evaluated on 100 fresh epis
 | Environment | Algorithm | Solved | Median steps to solve | Greedy eval | Sampled eval |
 | :--- | :--- | :---: | ---: | ---: | ---: |
 | CartPole-v1 | DQN | 1/3 | 464k | 429.7 ± 104.0 | — |
-| CartPole-v1 | PPO | 2/3 | 410k | 500.0 ± 0.0 | 488.6 ± 8.0 |
+| CartPole-v1 | PPO | 3/3 | 413k | 500.0 ± 0.0 | 487.2 ± 7.6 |
 | LunarLander-v3 | DQN | 3/3 | 163k | 217.5 ± 4.5 | — |
 | LunarLander-v3 | PPO | 3/3 | 704k | 239.9 ± 6.5 | 243.5 ± 8.4 |
 
@@ -39,8 +39,8 @@ A seed that stopped early (solved) is held at its final value.</sub>
   118k–199k environment steps, tuned PPO in 659k–828k, about 4× more. PPO ends with the
   better policy (greedy eval 240 vs 218) and finishes faster in wall time, because it
   steps 16 environments at once.
-- **PPO dominates CartPole early** (return ~270 after 50k steps, DQN ~40), and its
-  greedy policy balances perfectly (500/500) on every seed.
+- **PPO dominates CartPole** (return ~250 after 50k steps, DQN ~40), solves it on all 3 seeds
+  and its greedy policy balances perfectly (500/500) on every seed.
 - **DQN on CartPole is the least stable combination**: one seed solves it, the others
   plateau between 300 and 480. Seed-to-seed variance is large for both algorithms,
   which is why single-seed results in RL are not worth much.
@@ -96,19 +96,19 @@ on the same 3 seeds ([full table](results/RESULTS.md#tuning-history-ppo_lunarlan
 
 How do the trained policies cope when their observations are noisy, as real sensors are? [`scripts/robustness.py`](scripts/robustness.py) adds Gaussian noise to every observation, scaled per dimension to the spread of that reading in clean episodes, and replays every seed greedily ([full table](results/ROBUSTNESS.md)):
 
-> Measured on the v1.0.0 models, before PPO on LunarLander was retuned (then: 1/3 seeds solved, mean greedy eval 146; see "Tuning PPO on LunarLander" above). Re-running it needs all six DQN models, and only seed 1 of each is kept in the repo, so the PPO rows here describe the old policy.
+> Re-run in October 2026 with the current models, all 12 of which are now kept in `results/models/` (before, only seed 1 of each DQN model was, so the study could not be repeated). The DQN runs retrained bit-for-bit; the PPO CartPole runs, last trained for v1.0.0, did not (the vectorised-environment rework changed their random draws), so their row in the results table was refreshed: 3/3 seeds solved instead of 2/3.
 
 ![Return vs observation noise](results/plots/robustness.png)
 
 | Mean return (3 seeds) | clean | 0.2σ | 0.5σ | 1σ |
 | :--- | ---: | ---: | ---: | ---: |
-| LunarLander · DQN | **220** | 140 | 54 | 1 |
-| LunarLander · PPO | 143 | **153** | **154** | **94** |
-| CartPole · DQN | 414 | 417 | 394 | 329 |
-| CartPole · PPO | **500** | **500** | **500** | **459** |
+| LunarLander · DQN | 220 | 133 | 40 | 1 |
+| LunarLander · PPO | **242** | **244** | **243** | **198** |
+| CartPole · DQN | 414 | 425 | 393 | 329 |
+| CartPole · PPO | **500** | **500** | **500** | **480** |
 
-- **The best clean policy is not the most robust one.** On LunarLander DQN wins without noise but falls apart as noise grows: −36% at 0.2σ, −75% at 0.5σ. PPO barely moves up to 0.5σ, and the two cross between 0.1σ and 0.2σ.
-- **PPO on CartPole shrugs off noise** up to half a standard deviation on every reading.
+- **Tuned PPO is both the best clean policy and the most robust.** On LunarLander it scores 242 without noise and still 243 at 0.5σ, while DQN falls from 220 to 133 at 0.2σ (−40%) and 40 at 0.5σ (−82%). With the v1.0.0 PPO (clean 143) the two lines crossed between 0.1σ and 0.2σ; retuning PPO removed the trade-off.
+- **PPO on CartPole shrugs off noise** up to half a standard deviation on every reading, and still averages 480 at 1σ.
 - A plausible reason, not tested here: PPO is trained on a stochastic policy that already has to act well under its own randomness, while greedy DQN picks the argmax of Q-values that can flip with small input changes.
 
 ---
