@@ -6,6 +6,14 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/train.py --set key=value --tag name` overrides one hyperparameter and writes
+  the run to `results/ablations/<name>/`, apart from the published results.
+- `scripts/q_bias.py` compares each DQN's Q-values with the returns it actually gets.
+  Without Double DQN, 2 of 3 CartPole seeds overestimate far above the possible
+  maximum; with it, the bias is smaller but still there (#19).
+
 ### Changed
 
 - PPO on LunarLander retuned: 16 environments x 1,024 steps per update in minibatches

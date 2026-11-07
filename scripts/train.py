@@ -7,6 +7,7 @@ and the final weights to results/models/<algo>_<env>_seed<seed>.pt.
 Usage:
     python scripts/train.py --env cartpole --algo dqn --seed 1
     python scripts/train.py --env lunarlander --algo ppo --seed 2
+    python scripts/train.py --env cartpole --algo dqn --seed 1 --set double_dqn=false --tag no-double
 """
 import argparse
 from typing import Any
@@ -47,6 +48,40 @@ def load_hyperparams(algo: str, env: str) -> dict:
         return dict(yaml.safe_load(f)[algo][env])
 
 
+def apply_overrides(hp: dict, overrides: list[str]) -> dict:
+    """hp with each "key=value" applied. Values are parsed as YAML (false, 1.0e-4, [64, 64]).
+
+    Only keys that config.yaml already sets can be changed, and only to a value of the
+    same type, so a typo cannot start a long run with a silently ignored setting.
+    """
+    hp = dict(hp)
+    for item in overrides:
+        key, sep, text = item.partition("=")
+        if not sep or not key:
+            raise ValueError(f"expected key=value, got {item!r}")
+        if key not in hp:
+            raise ValueError(f"unknown hyperparameter {key!r}; config.yaml sets {sorted(hp)}")
+        value = yaml.safe_load(text)
+        old = hp[key]
+        if isinstance(old, float) and isinstance(value, str):
+            # YAML 1.1 reads 3e-4 (no dot) as a string; Python's float() does not
+            try:
+                value = float(value)
+            except ValueError:
+                pass
+        same_type = type(value) is type(old) or (isinstance(old, float) and type(value) is int)
+        if not same_type:
+            raise ValueError(f"{key} is {type(old).__name__} in config.yaml, got {value!r}")
+        hp[key] = float(value) if isinstance(old, float) else value
+    return hp
+
+
+def run_dir(out_dir: Path, tag: str | None) -> Path:
+    """Where a run's json and model go. Tagged runs (ablations) live apart from the
+    published results, so make_report.py and robustness.py never pick them up."""
+    return out_dir / "ablations" / tag if tag else out_dir
+
+
 def build_agent(algo: str, obs_dim: int, action_dim: int, hp: dict):
     hp = dict(hp, hidden_dims=tuple(hp["hidden_dims"]))
     if algo == "dqn":
@@ -57,7 +92,8 @@ def build_agent(algo: str, obs_dim: int, action_dim: int, hp: dict):
 
 
 def model_path(run: dict, results_dir: Path = ROOT / "results") -> Path:
-    return results_dir / "models" / f"{run['algo']}_{run['env']}_seed{run['seed']}.pt"
+    folder = run_dir(results_dir, run.get("tag"))
+    return folder / "models" / f"{run['algo']}_{run['env']}_seed{run['seed']}.pt"
 
 
 def load_trained_agent(run: dict, results_dir: Path = ROOT / "results"):
@@ -86,9 +122,14 @@ def run(
     out_dir: Path,
     tensorboard_dir: Path | None = None,
     num_envs: int | None = None,
+    overrides: list[str] | None = None,
+    tag: str | None = None,
 ) -> dict:
+    if overrides and not tag:
+        raise ValueError("--set needs --tag, so the run does not replace a published one")
     env_id, threshold = ENVS[env_name]
-    hp = load_hyperparams(algo, env_name)
+    hp = apply_overrides(load_hyperparams(algo, env_name), overrides or [])
+    out_dir = run_dir(out_dir, tag)
     if timesteps is not None:
         hp["total_timesteps"] = timesteps
 
@@ -118,7 +159,7 @@ def run(
         agent=agent,
         env=env,
         total_timesteps=hp["total_timesteps"],
-        checkpoint_dir=ROOT / "checkpoints" / env_name / f"{algo}_seed{seed}",
+        checkpoint_dir=ROOT / "checkpoints" / env_name / (f"{algo}_seed{seed}" + (f"_{tag}" if tag else "")),
         callbacks=CallbackList([EarlyStoppingCallback(reward_threshold=threshold)]),
         # progress line roughly every 20k environment steps
         log_interval=20_000 if algo == "dqn" else max(1, 20_000 // hp["num_steps"]),
@@ -151,6 +192,7 @@ def run(
         "algo": algo,
         "seed": seed,
         "threshold": threshold,
+        **({"tag": tag, "overrides": list(overrides or [])} if tag else {}),
         "hyperparams": hp,
         "total_steps": int(metrics.steps[-1]) if metrics.steps else 0,
         "solved_at_step": solved_at_step(metrics.episode_rewards, metrics.steps, threshold),
@@ -191,10 +233,20 @@ def main():
         "--tensorboard", nargs="?", type=Path, const=ROOT / "logs" / "tensorboard", default=None,
         metavar="DIR", help="also write TensorBoard scalars (default DIR: logs/tensorboard/)",
     )
+    parser.add_argument(
+        "--set", action="append", default=[], metavar="KEY=VALUE", dest="overrides",
+        help="override one hyperparameter from config.yaml, e.g. double_dqn=false (needs --tag)",
+    )
+    parser.add_argument(
+        "--tag", help="name of an ablation: writes to <out>/ablations/<tag>/ instead of <out>/",
+    )
     args = parser.parse_args()
 
     torch.set_num_threads(args.threads)
-    run(args.env, args.algo, args.seed, args.timesteps, args.out, args.tensorboard, args.num_envs)
+    run(
+        args.env, args.algo, args.seed, args.timesteps, args.out, args.tensorboard, args.num_envs,
+        overrides=args.overrides, tag=args.tag,
+    )
 
 
 if __name__ == "__main__":
