@@ -111,6 +111,38 @@ How do the trained policies cope when their observations are noisy, as real sens
 - **PPO on CartPole shrugs off noise** up to half a standard deviation on every reading, and still averages 480 at 1σ.
 - A plausible reason, not tested here: PPO is trained on a stochastic policy that already has to act well under its own randomness, while greedy DQN picks the argmax of Q-values that can flip with small input changes.
 
+### Does Double DQN reduce overestimation? (issue #19)
+
+DQN's target takes the maximum over noisy Q estimates, so it tends to overestimate. Double DQN lets the online network pick the action and the target network value it, which is meant to reduce that bias. It has been on in every configuration here, so this compares it with 3 seeds trained without it ([`results/ablations/no-double/`](results/ablations/no-double/)); everything else is identical:
+
+```bash
+python scripts/train.py --env cartpole --algo dqn --seed 1 --set double_dqn=false --tag no-double
+python scripts/q_bias.py      # Q against the return each trained model actually gets
+```
+
+[`scripts/q_bias.py`](scripts/q_bias.py) plays 20 greedy episodes per model and compares the network's Q for each chosen action with the discounted return that followed. Positive means overestimation.
+
+| CartPole, γ = 0.99 | Seed 1 | Seed 2 | Seed 3 |
+| :--- | ---: | ---: | ---: |
+| Q at the first state, Double DQN | 107.1 | 109.2 | 116.5 |
+| Q at the first state, plain DQN | **186.6** | 109.9 | **237.7** |
+| Return that followed, Double DQN | 99.3 | 98.7 | 96.0 |
+| Return that followed, plain DQN | 61.5 | 99.3 | 81.2 |
+| Greedy eval (100 episodes), Double DQN | 500.0 | 479.0 | 310.2 |
+| Greedy eval (100 episodes), plain DQN | 95.3 | 500.0 | 201.5 |
+
+CartPole pays 1 per step, so with γ = 0.99 no discounted return can exceed 1 / (1 − γ) = 100. Every Q above 100 is an overestimate whatever the policy does.
+
+- **Without Double DQN, 2 of 3 CartPole seeds overestimate wildly.** They predict 187 and 238 where 100 is the ceiling, and their policies fail (greedy eval 95 and 202). The seed that learned well (500) has the same Q as with Double DQN.
+- **Double DQN reduces the bias but does not remove it.** All three Double DQN seeds still predict 107 – 117 at the start, above the ceiling. The README used to say it eliminates the bias; it now says reduces.
+- **On LunarLander there is no clear difference.** Start bias with Double DQN is +15.9, −9.7 and +11.2 against +1.9, +3.4 and +25.7 without it, and all 3 plain-DQN seeds solve the task (median 152k steps, greedy eval 257, 249 and 191).
+
+What this does not show:
+
+1. **Three seeds, and a seed is not a controlled pair.** The same seed gives the same start, but the runs diverge once the targets differ. Seed-to-seed variance is large for DQN on CartPole anyway: with Double DQN only 1 of 3 seeds solves it.
+2. **It does not show which way the cause runs.** Overestimation and a failing policy go together: the Double DQN seed with the weakest policy (310) also has the highest Q. Inflated targets can drive a bad policy, and a bad policy also makes the actual return low.
+3. **The figures for all states depend on how a time limit is handled.** CartPole stops at 500 steps, so near the cut the actual return falls to zero while Q correctly stays high. `q_bias.py` leaves out the last 299 steps of such episodes, where γ to the remaining steps still exceeds 5 %. The start-state figures above do not depend on that choice. Per-step figures are in [`results/ablations/q_bias.json`](results/ablations/q_bias.json).
+
 ---
 
 
@@ -136,7 +168,7 @@ $$y = r + \gamma \max_{a'} Q_{\theta^-}(s', a')$$
 **Why this works:**
 - **Experience replay** breaks temporal correlations in the data stream, enabling stable mini-batch SGD
 - **Target network** fixes the non-stationary bootstrap target for $C$ steps, preventing oscillation
-- **Double DQN** decouples action *selection* (online net) from *evaluation* (target net), eliminating maximization bias: $y = r + \gamma Q_{\theta^-}(s', \arg\max_{a'} Q_\theta(s', a'))$
+- **Double DQN** decouples action *selection* (online net) from *evaluation* (target net), which reduces maximization bias ([measured](#does-double-dqn-reduce-overestimation-issue-19); it does not remove it): $y = r + \gamma Q_{\theta^-}(s', \arg\max_{a'} Q_\theta(s', a'))$
 - **Dueling architecture** separates $V(s)$ and $A(s,a)$ streams: $Q(s,a) = V(s) + A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'} A(s,a')$
 
 **Implementation details:**
@@ -212,17 +244,19 @@ $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l
 │   └── evaluation/
 │       ├── evaluator.py        # Greedy evaluation with trajectory collection
 │       └── plotting.py         # Training curves, comparisons, distributions
-├── tests/                      # 75 pytest tests
+├── tests/                      # 112 pytest tests
 ├── scripts/
 │   ├── train.py                # train one algo/env/seed from config.yaml
 │   ├── make_report.py          # plots, GIFs and RESULTS.md from all runs
 │   ├── robustness.py           # evaluation under observation noise
+│   ├── q_bias.py               # Q-values against the returns actually obtained
 │   └── enjoy.py                # watch a trained agent play
 ├── notebooks/
 │   └── dqn_vs_ppo_comparison.ipynb
 ├── results/
 │   ├── runs/                   # per-seed training logs + evaluations (JSON)
 │   ├── models/                 # weights of the best seed per algo/env
+│   ├── ablations/<tag>/        # runs and models trained with --set ... --tag <tag>
 │   ├── plots/  gifs/           # generated figures
 │   └── RESULTS.md              # generated results table
 └── config.yaml                 # all hyperparameters (single source of truth)
@@ -248,6 +282,10 @@ python scripts/train.py --env lunarlander --algo dqn --seed 1
 
 # Rebuild plots, GIFs and results/RESULTS.md from every run in results/runs/
 python scripts/make_report.py
+
+# Ablation: change one hyperparameter, keep the run apart from the published results
+python scripts/train.py --env cartpole --algo dqn --seed 1 --set double_dqn=false --tag no-double
+python scripts/q_bias.py   # Q against the actual return, every DQN model
 
 # Watch a trained agent play in a window (best seed unless --seed is given)
 python scripts/enjoy.py --env lunarlander --algo dqn
